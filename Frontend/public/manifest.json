@@ -1,0 +1,18 @@
+{
+  "short_name": "ResearchFlow",
+  "name": "AI Research Flow — Offline Survey Platform",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0b132b",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "scope": "/"
+}
+
