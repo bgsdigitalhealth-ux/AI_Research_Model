@@ -5,6 +5,7 @@ import { useQuestionnaireDetail } from '@/hooks/useQuestionnaires';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { offlineDb } from '@/lib/indexedDb';
 import { dataCollectionApi } from '@/api/dataCollectionApi';
+import { questionnairesApi } from '@/api/questionnairesApi';
 import { StatusState } from '@/components/shared/StatusState';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,7 +34,9 @@ import {
   Database,
   Lock,
   Loader2,
-  HardDrive
+  HardDrive,
+  FileSpreadsheet,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -52,12 +55,130 @@ export function ParticipantSurveyFormView() {
   const [consentRecord, setConsentRecord] = useState<ConsentRecord | null>(null);
   const [isLoadingSchema, setIsLoadingSchema] = useState(true);
   const [responses, setResponses] = useState<Record<string, unknown>>({});
+  const [remarks, setRemarks] = useState<Record<string, string>>({});
+  const [isExporting, setIsExporting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [lastDraftSaved, setLastDraftSaved] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionCompleted, setSubmissionCompleted] = useState<QueuedSubmission | null>(null);
 
   const draftKey = `${id}_${participantId}`;
+
+  // Dynamic Score Calculation & Maturity Benchmark (Image 2)
+  const scoreStats = React.useMemo(() => {
+    let earned = 0;
+    let maxPossible = 0;
+    let answeredCount = 0;
+    const questions = survey?.questions || [];
+
+    questions.forEach((q) => {
+      if (q.type === 'section_heading') return;
+      const val = responses[q.id];
+      let questionMax = 0;
+
+      if (q.choices && q.choices.length > 0) {
+        q.choices.forEach((c, idx) => {
+          const fallback = q.choices!.length === 6 ? idx * 2 : idx + 1;
+          const sc = c.score !== undefined ? c.score : fallback;
+          if (sc > questionMax) questionMax = sc;
+
+          if (val !== undefined && String(val).toLowerCase() === String(c.code).toLowerCase()) {
+            earned += sc;
+            answeredCount += 1;
+          }
+        });
+      } else {
+        questionMax = 10;
+        if (val !== undefined && val !== '') answeredCount += 1;
+      }
+
+      maxPossible += (questionMax > 0 ? questionMax : 10);
+    });
+
+    const percentage = maxPossible > 0 ? (earned / maxPossible) * 100 : 0;
+    let benchmarkLevel = 'Not available (Score 0)';
+
+    if (percentage >= 90) benchmarkLevel = 'Mature / exemplary (Score 10)';
+    else if (percentage >= 70) benchmarkLevel = 'Consistently implemented (Score 8)';
+    else if (percentage >= 50) benchmarkLevel = 'Implemented (Score 6)';
+    else if (percentage >= 30) benchmarkLevel = 'Partially implemented (Score 4)';
+    else if (percentage >= 10) benchmarkLevel = 'Initial (Score 2)';
+
+    return { earned, maxPossible, answeredCount, percentage, benchmarkLevel };
+  }, [survey, responses]);
+
+  const handleExportExcel = async () => {
+    if (!survey) return;
+    try {
+      setIsExporting(true);
+      try {
+        const blob = await questionnairesApi.exportResponsesExcel(survey.id, {
+          responses,
+          remarks,
+          participantId,
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${survey.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_${participantId}_Score_Report.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+        toast({ title: 'Excel Export Completed', variant: 'success' });
+        return;
+      } catch (err) {
+        console.warn('Backend export failed, falling back to client-side XLSX generation', err);
+      }
+
+      const XLSX = await import('xlsx');
+      const rows: any[][] = [];
+      rows.push([`${survey.title.toUpperCase()} - PARTICIPANT ASSESSMENT REPORT`]);
+      rows.push([`Subject: ${participantId} | Date: ${new Date().toISOString()}`]);
+      rows.push(['']);
+      rows.push(['No.', 'Question', 'Response (select one)', 'Score', 'Remarks']);
+
+      let qIdx = 0;
+      (survey.questions || []).forEach((q) => {
+        if (q.type === 'section_heading') return;
+        qIdx += 1;
+        const val = responses[q.id];
+        let chosenLabel = '(No response selected)';
+        let chosenScore = 0;
+
+        if (q.choices && q.choices.length > 0) {
+          q.choices.forEach((c, idx) => {
+            const fallback = q.choices!.length === 6 ? idx * 2 : idx + 1;
+            const sc = c.score !== undefined ? c.score : fallback;
+            if (val !== undefined && String(val).toLowerCase() === String(c.code).toLowerCase()) {
+              chosenLabel = c.label;
+              chosenScore = sc;
+            }
+          });
+        }
+
+        const userRemark = remarks[q.id] || q.remark || '';
+        rows.push([qIdx, q.text, chosenLabel, chosenScore, userRemark]);
+      });
+
+      rows.push(['']);
+      rows.push(['TOTAL SCORE', '', '', scoreStats.earned, `Earned ${scoreStats.earned} out of ${scoreStats.maxPossible} maximum points`]);
+      rows.push(['PERCENTAGE ACHIEVED', '', '', `${scoreStats.percentage.toFixed(1)}%`, '']);
+      rows.push(['OVERALL MATURITY LEVEL', '', '', scoreStats.benchmarkLevel, 'Standardized 6-Level Maturity Framework Benchmark']);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      worksheet['!cols'] = [{ wch: 8 }, { wch: 52 }, { wch: 30 }, { wch: 16 }, { wch: 38 }];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Score Report');
+      XLSX.writeFile(workbook, `${survey.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_${participantId}_Score_Report.xlsx`);
+      toast({ title: 'Excel Export Completed', variant: 'success' });
+    } catch (e: unknown) {
+      toast({ title: 'Export Failed', description: (e as Error)?.message, variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
 
   // 1. Verify consent and load survey schema (Online or Offline IndexedDB)
   useEffect(() => {
@@ -353,21 +474,32 @@ export function ParticipantSurveyFormView() {
       case 'single_choice':
         return (
           <div className="space-y-2">
-            {(q.choices || []).map((choice) => (
-              <label
-                key={choice.id}
-                className="flex items-center gap-3 p-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs text-slate-800"
-              >
-                <input
-                  type="radio"
-                  name={`survey_q_${q.id}`}
-                  checked={val === choice.code}
-                  onChange={() => handleAnswerChange(q.id, choice.code)}
-                  className="h-4 w-4 text-blue-600 border-slate-300 focus:ring-blue-500"
-                />
-                <span className="font-medium">{choice.label}</span>
-              </label>
-            ))}
+            {(q.choices || []).map((choice) => {
+              const isSelected = val === choice.code;
+              return (
+                <label
+                  key={choice.id}
+                  className={cn(
+                    "flex items-center justify-between gap-3 p-2.5 rounded-lg border cursor-pointer text-xs transition-all",
+                    isSelected
+                      ? "border-blue-500 bg-blue-50/50 text-blue-950 ring-1 ring-blue-500/20"
+                      : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                  )}
+                >
+                  <div className="flex items-center gap-2.5 flex-1">
+                    <input
+                      type="radio"
+                      name={`survey_q_${q.id}`}
+                      checked={isSelected}
+                      onChange={() => handleAnswerChange(q.id, choice.code)}
+                      className="h-4 w-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="font-medium text-[11px]">{choice.label}</span>
+                  </div>
+
+                </label>
+              );
+            })}
           </div>
         );
 
@@ -498,8 +630,18 @@ export function ParticipantSurveyFormView() {
                 </Button>
               </Link>
 
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                <span>Export Score-Wise Excel (.xlsx)</span>
+              </Button>
               <Link to="/data-collection">
-                <Button size="sm" className="gap-1.5">
+                <Button size="sm" variant="outline" className="gap-1.5">
                   <span>Finish & Return Hub</span>
                 </Button>
               </Link>
@@ -608,6 +750,24 @@ export function ParticipantSurveyFormView() {
                       </div>
 
                       <div className="pt-1">{renderQuestionInput(q)}</div>
+
+                      {/* Dynamic User Remark & Explanation Field */}
+                      <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                            <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                            <span>Remarks & Explanation</span>
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-medium">Dynamic Field</span>
+                        </div>
+                        <textarea
+                          rows={2}
+                          value={remarks[q.id] || ''}
+                          onChange={(e) => setRemarks(prev => ({ ...prev, [q.id]: e.target.value }))}
+                          placeholder="Provide observations, evidence, remarks or explanation for this score..."
+                          className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/40"
+                        />
+                      </div>
 
                       {hasError && (
                         <p className="text-[11px] font-semibold text-red-600 flex items-center gap-1 mt-1">

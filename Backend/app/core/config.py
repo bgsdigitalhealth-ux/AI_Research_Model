@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 from pydantic import AnyHttpUrl, EmailStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,9 +17,24 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_POOL_TIMEOUT: int = 30
 
+    @field_validator("DATABASE_URL", mode="before")
+    def assemble_async_db_url(cls, v: Optional[str]) -> Optional[str]:
+        if v and isinstance(v, str):
+            v = v.strip()
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
     @field_validator("SYNC_DATABASE_URL", mode="before")
     def assemble_sync_db_url(cls, v: Optional[str], info) -> str:
-        if v:
+        if v and isinstance(v, str):
+            v = v.strip()
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql://", 1)
+            elif "asyncpg" in v:
+                return v.replace("postgresql+asyncpg://", "postgresql://", 1)
             return v
         db_url = info.data.get("DATABASE_URL", "")
         if "asyncpg" in db_url:
@@ -41,6 +56,19 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
     ]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    def assemble_cors_origins(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # Rate Limiting
     RATE_LIMIT_LOGIN_MAX_ATTEMPTS: int = 5

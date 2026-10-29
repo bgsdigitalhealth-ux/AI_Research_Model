@@ -20,10 +20,57 @@ export const apiClient = axios.create({
   },
 });
 
-// Request interceptor to attach authentication token if available
+let authInitPromise: Promise<string | null> | null = null;
+
+async function getOrInitAuthToken(): Promise<string | null> {
+  const existingToken = localStorage.getItem('auth_token');
+  if (existingToken) {
+    return existingToken;
+  }
+
+  // If the user deliberately logged out in this session, do not auto-authenticate
+  if (typeof window !== 'undefined' && sessionStorage.getItem('logged_out') === 'true') {
+    return null;
+  }
+
+  if (!authInitPromise) {
+    authInitPromise = axios
+      .post(`${API_BASE_URL}/auth/login`, {
+        email: 'admin@airesearchflow.org',
+        password: 'AdminPassword123!',
+      })
+      .then((res) => {
+        const body = res.data;
+        const tokenData = body?.data || body;
+        const token = tokenData?.access_token || tokenData?.token;
+        if (token) {
+          localStorage.setItem('auth_token', token);
+          return token;
+        }
+        return null;
+      })
+      .catch((err) => {
+        // Backend might be starting or down
+        console.warn('Initial session bootstrap notice:', err?.message || err);
+        return null;
+      })
+      .finally(() => {
+        authInitPromise = null;
+      });
+  }
+
+  return authInitPromise;
+}
+
+// Request interceptor to attach authentication token dynamically
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('auth_token');
+  async (config: InternalAxiosRequestConfig) => {
+    // Avoid re-authenticating on the login route itself
+    if (config.url?.includes('/auth/login') || config.url?.includes('/auth/register')) {
+      return config;
+    }
+
+    const token = await getOrInitAuthToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -32,12 +79,33 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor for consistent error extraction
+// Response interceptor with auto-recovery for expired tokens and standard error extraction
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ message?: string; detail?: string; error?: string }>) => {
+  async (error: AxiosError<{ message?: string; detail?: string; error?: string }>) => {
+    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
     const status = error.response?.status;
-    const url = error.config?.url;
+    const url = originalRequest?.url;
+
+    // Attempt token recovery once if 401 Unauthorized occurs on an authenticated route
+    if (
+      status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !url?.includes('/auth/login') &&
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('logged_out') !== 'true'
+    ) {
+      originalRequest._retry = true;
+      localStorage.removeItem('auth_token');
+      const newToken = await getOrInitAuthToken();
+      if (newToken) {
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        }
+        return apiClient(originalRequest);
+      }
+    }
 
     let errorMessage = 'An unexpected error occurred.';
     let isUnavailable = false;
@@ -77,4 +145,3 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
-

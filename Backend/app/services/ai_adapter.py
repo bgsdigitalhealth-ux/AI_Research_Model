@@ -91,6 +91,33 @@ class BaseAIProvider(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    async def extract_questionnaire_from_document(
+        self,
+        full_text: str,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Parses questions from an uploaded document (PDF/DOCX/Excel/CSV) into the questionnaire template:
+        - Question text (Mandatory)
+        - Choices with radio buttons in a, b, c format (Mandatory)
+        - Explanation (Optional)
+        - Remark (Optional)
+        """
+        pass
+
+    @abc.abstractmethod
+    async def extract_questionnaire_from_image(
+        self,
+        image_data_uri: str,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Parses questions from an uploaded image (PNG, JPG, etc.) using AI vision capabilities
+        into the standardized questionnaire template.
+        """
+        pass
+
 
 class UnconfiguredAIProvider(BaseAIProvider):
     async def extract_protocol_metadata(
@@ -112,6 +139,24 @@ class UnconfiguredAIProvider(BaseAIProvider):
             "in the backend environment configuration, or manually design questionnaire questions."
         )
 
+    async def extract_questionnaire_from_document(
+        self,
+        full_text: str,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        raise AIProviderNotConfiguredError(
+            "AI provider is not configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
+        )
+
+    async def extract_questionnaire_from_image(
+        self,
+        image_data_uri: str,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        raise AIProviderNotConfiguredError(
+            "AI provider is not configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
+        )
+
 
 class GeminiAIProvider(BaseAIProvider):
     def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro"):
@@ -126,47 +171,20 @@ class GeminiAIProvider(BaseAIProvider):
         if settings.AI_STRIP_PARTICIPANT_IDENTIFIERS:
             full_text = strip_participant_identifiers(full_text)
 
-        # Truncate text if excessively long while preserving document structure (up to ~60k chars)
         doc_sample = full_text[:60000]
+        prompt = f"Extract structured research protocol metadata with source evidence from this text:\n\n{doc_sample}"
 
         system_instruction = (
-            "You are a clinical and scientific research protocol parser. "
-            "Extract structured protocol fields from the provided document text. "
-            "For each field, extract the factual value and quote the EXACT verbatim source sentence as evidence, "
-            "including the page number where found. "
-            "If a field is not found in the text, mark isMissing: true and aiValue: null. "
-            "DO NOT FABRICATE OR HALLUCINATE ANY VALUE. "
-            "Return JSON only with a 'fields' object containing keys: "
-            "studyTitle, researchAims, studyDesign, targetPopulation, inclusionCriteria, "
-            "exclusionCriteria, samplingMethod, sampleSize, primaryOutcomes, secondaryOutcomes, "
-            "variablesAndInstruments, dataCollectionMethods, statisticalAnalysisPlan."
+            "You are a clinical protocol extraction engine. Output JSON only. "
+            "Fields required: studyTitle, researchAims, studyDesign, targetPopulation, "
+            "inclusionCriteria, exclusionCriteria, samplingMethod, sampleSize, "
+            "primaryOutcomes, secondaryOutcomes, variablesAndInstruments, "
+            "dataCollectionMethods, statisticalAnalysisPlan. "
+            "Each field must have 'aiValue', 'isMissing', and 'evidence' with 'pageNumber' and 'sourceTextSnippet'."
         )
 
-        prompt = f"""
-Protocol Document Excerpt:
-{doc_sample}
-
-Extract all fields according to the schema:
-{{
-  "fields": {{
-    "studyTitle": {{ "aiValue": string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "researchAims": {{ "aiValue": [string] or string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "studyDesign": {{ "aiValue": string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "targetPopulation": {{ "aiValue": string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "inclusionCriteria": {{ "aiValue": [string] or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "exclusionCriteria": {{ "aiValue": [string] or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "samplingMethod": {{ "aiValue": string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "sampleSize": {{ "aiValue": string or int or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "primaryOutcomes": {{ "aiValue": [string] or string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "secondaryOutcomes": {{ "aiValue": [string] or string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "variablesAndInstruments": {{ "aiValue": [string] or string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "dataCollectionMethods": {{ "aiValue": [string] or string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }},
-    "statisticalAnalysisPlan": {{ "aiValue": string or null, "isMissing": bool, "evidence": {{ "pageNumber": int, "sourceTextSnippet": string }} }}
-  }}
-}}
-"""
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self.api_key}"
-        payload = {
+        req_body = {
             "contents": [{"parts": [{"text": f"{system_instruction}\n\n{prompt}"}]}],
             "generationConfig": {
                 "temperature": 0.0,
@@ -176,7 +194,7 @@ Extract all fields according to the schema:
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(endpoint, json=payload)
+                resp = await client.post(endpoint, json=req_body)
                 if resp.status_code != 200:
                     raise AIExecutionError(f"Gemini API returned HTTP {resp.status_code}: {resp.text}")
                 data = resp.json()
@@ -187,18 +205,21 @@ Extract all fields according to the schema:
         except Exception as exc:
             if isinstance(exc, (AIExecutionError, AIProviderNotConfiguredError)):
                 raise
-            raise AIExecutionError(f"Gemini extraction failed: {str(exc)}") from exc
+            raise AIExecutionError(f"Gemini protocol extraction failed: {str(exc)}") from exc
 
     def _build_result(self, parsed_json: Dict[str, Any]) -> ExtractedProtocolResult:
         extracted_fields: Dict[str, ExtractedFieldData] = {}
-        raw_fields = parsed_json.get("fields", {})
+        raw_fields = parsed_json.get("fields", parsed_json)
 
         for defn in PROTOCOL_FIELD_DEFINITIONS:
             k = defn["key"]
             f_data = raw_fields.get(k, {})
+            if not isinstance(f_data, dict):
+                f_data = {"aiValue": f_data}
+
             evidence_data = f_data.get("evidence")
             evidence = None
-            if evidence_data and evidence_data.get("sourceTextSnippet"):
+            if evidence_data and isinstance(evidence_data, dict) and evidence_data.get("sourceTextSnippet"):
                 evidence = ExtractedFieldEvidence(
                     pageNumber=evidence_data.get("pageNumber"),
                     paragraphNumber=evidence_data.get("paragraphNumber"),
@@ -238,12 +259,15 @@ Extract all fields according to the schema:
             "You are a clinical psychometrician and questionnaire architect. "
             "Synthesize a scientifically sound candidate questionnaire for clinical research. "
             "Output JSON with 'title', 'description', 'sections', 'questions', and 'mappings'. "
-            "Each question must include: 'id' (short hex), 'variableName' (alphanumeric identifier starting with letter), "
-            "'type' ('short_text', 'long_text', 'integer', 'decimal', 'single_choice', 'multiple_choice', 'rating_5', 'likert_5'), "
-            "'text', 'description', 'sectionId', 'order', 'validation' ({'required': bool}), "
-            "'choices' ([{'code': str, 'label': str, 'score': float}] if choice type), "
+            "CRITICAL QUESTION RULES: "
+            "1. NO SUBDESCRIPTION: Set 'description': null for EVERY question. Never generate subtitles, participant guidance, or subdescriptions on individual question items. "
+            "2. RADIO BUTTON SINGLE CHOICE IN a, b, c FORMAT: All evaluation questions must use 'type': 'single_choice'. "
+            "The 'choices' array must provide options in a, b, c format with 'code': 'a', 'b', 'c', 'd', ... and 'label': 'a) ...', 'b) ...', 'c) ...', 'd) ...'. "
+            "3. EXPLANATION & REMARK TEMPLATE: Include 'explanation': str (optional rationale) and 'remark': str (optional commentary). "
+            "Each question must include: 'id' (short hex), 'variableName', 'type': 'single_choice', 'text', 'description': null, 'explanation': null or str, 'remark': null or str, "
+            "'sectionId', 'order', 'validation': {'required': true}, 'choices': [{'code': 'a', 'label': 'a) ...', 'score': 1.0}, {'code': 'b', 'label': 'b) ...', 'score': 2.0}, ...], "
             "'targetObjectiveId', 'targetOutcomeName'. "
-            "Mappings must link each outcome to covered question IDs."
+            "'mappings': list of objects [{'objectiveId': str, 'objectiveTitle': str, 'outcomeName': str, 'coveredQuestionIds': list[str], 'isCovered': bool}]."
         )
 
         prompt = f"""
@@ -279,6 +303,51 @@ Generate a complete questionnaire draft adhering strictly to this schema. Output
                 raise
             raise AIExecutionError(f"Gemini questionnaire generation failed: {str(exc)}") from exc
 
+    async def extract_questionnaire_from_document(
+        self,
+        full_text: str,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if settings.AI_STRIP_PARTICIPANT_IDENTIFIERS:
+            full_text = strip_participant_identifiers(full_text)
+
+        doc_sample = full_text[:60000]
+
+        system_instruction = (
+            "You are an expert psychometrician and assessment document parser. "
+            "Extract questions from the uploaded document into a structured questionnaire template. "
+            "CRITICAL TEMPLATE FORMAT: "
+            "Each question must contain: "
+            "1. 'text': Question prompt / statement. (MANDATORY) "
+            "2. 'choices': List of choices with radio buttons. (MANDATORY) All choices in a, b, c format with 'code': 'a', 'b', 'c', 'd' and 'label': 'a) ...', 'b) ...'. "
+            "3. 'explanation': Solution rationale, answer explanation, or concept details. (OPTIONAL, null if none) "
+            "4. 'remark': Remarks, notes, instructor observations. (OPTIONAL, null if none) "
+            "Each question has: 'id', 'variableName', 'type': 'single_choice', 'text', 'explanation', 'remark', 'description': null, 'validation': {'required': true}, 'choices'."
+        )
+
+        prompt = f"Document Filename: {filename or 'Questions.pdf'}\n\nContent:\n{doc_sample}"
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self.api_key}"
+        req_body = {
+            "contents": [{"parts": [{"text": f"{system_instruction}\n\n{prompt}"}]}],
+            "generationConfig": {
+                "temperature": 0.1,
+                "responseMimeType": "application/json",
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                resp = await client.post(endpoint, json=req_body)
+                if resp.status_code != 200:
+                    raise AIExecutionError(f"Gemini API returned HTTP {resp.status_code}: {resp.text}")
+                data = resp.json()
+
+            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(raw_text)
+        except Exception as exc:
+            if isinstance(exc, (AIExecutionError, AIProviderNotConfiguredError)):
+                raise
+            raise AIExecutionError(f"Gemini question extraction failed: {str(exc)}") from exc
 
 
 class OpenAIProvider(BaseAIProvider):
@@ -388,12 +457,16 @@ class OpenAIProvider(BaseAIProvider):
             "You are a clinical psychometrician and questionnaire architect. "
             "Synthesize a scientifically sound candidate questionnaire for clinical research. "
             "Output JSON with 'title', 'description', 'sections', 'questions', and 'mappings'. "
-            "Each question must include: 'id' (short hex), 'variableName' (alphanumeric identifier starting with letter), "
-            "'type' ('short_text', 'long_text', 'integer', 'decimal', 'single_choice', 'multiple_choice', 'rating_5', 'likert_5'), "
-            "'text', 'description', 'sectionId', 'order', 'validation' ({'required': bool}), "
-            "'choices' ([{'code': str, 'label': str, 'score': float}] if choice type), "
+            "CRITICAL QUESTION RULES: "
+            "1. NO SUBDESCRIPTION: Set 'description': null for EVERY question. Never generate subtitles, participant guidance, or subdescriptions on individual question items. "
+            "2. RADIO BUTTON SINGLE CHOICE IN a, b, c FORMAT: All evaluation questions must use 'type': 'single_choice'. "
+            "The 'choices' array must provide options in a, b, c format with 'code': 'a', 'b', 'c', 'd', ... and 'label': 'a) ...', 'b) ...', 'c) ...', 'd) ...'. "
+            "3. QUESTION TEMPLATE FIELDS: Each question must include 'text' (mandatory), 'choices' (mandatory), "
+            "'explanation' (optional clinical rationale or null), and 'remark' (optional research remark or null). "
+            "Each question must include: 'id' (short hex), 'variableName', 'type': 'single_choice', 'text', 'description': null, 'explanation': null or str, 'remark': null or str, "
+            "'sectionId', 'order', 'validation': {'required': true}, 'choices': [{'code': 'a', 'label': 'a) ...', 'score': 1.0}, {'code': 'b', 'label': 'b) ...', 'score': 2.0}, ...], "
             "'targetObjectiveId', 'targetOutcomeName'. "
-            "Mappings must link each outcome to covered question IDs."
+            "'mappings': list of objects [{'objectiveId': str, 'objectiveTitle': str, 'outcomeName': str, 'coveredQuestionIds': list[str], 'isCovered': bool}]."
         )
 
         prompt = f"""
@@ -434,6 +507,195 @@ Generate a complete questionnaire draft adhering strictly to this schema. Output
                 raise
             raise AIExecutionError(f"OpenAI questionnaire generation failed: {str(exc)}") from exc
 
+    async def extract_questionnaire_from_document(
+        self,
+        full_text: str,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if settings.AI_STRIP_PARTICIPANT_IDENTIFIERS:
+            full_text = strip_participant_identifiers(full_text)
+
+        doc_sample = full_text[:60000]
+
+        system_instruction = (
+            "You are an expert psychometrician and questionnaire template extraction engine. "
+            "Your task is to parse questions from the uploaded document (PDF/exam/question bank) and format them into the standardized questionnaire template. "
+            "\n"
+            "CRITICAL TEMPLATE FORMAT REQUIREMENTS: "
+            "Every question in the template MUST strictly contain these 4 fields: "
+            "1. 'text': The question statement / problem prompt. (THIS FIELD IS MANDATORY) "
+            "2. 'choices': List of options with radio buttons. (THIS FIELD IS MANDATORY) "
+            "   - 'type' must be 'single_choice'. "
+            "   - Options must strictly be in a, b, c format: 'code': 'a', 'b', 'c', 'd', ... and 'label': 'a) ...', 'b) ...', 'c) ...', 'd) ...'. "
+            "   - Extract all options presented in the document (supports 6 options for maturity/governance rubrics: 1. Not available [score 0], 2. Initial [score 2], 3. Partially implemented [score 4], 4. Implemented [score 6], 5. Consistently implemented [score 8], 6. Mature / exemplary [score 10]). Include 'score' property for each choice (e.g. 0, 2, 4, 6, 8, 10). If no options are given, generate 6 standard maturity rubric options with scores 0, 2, 4, 6, 8, 10. "
+            "3. 'explanation': Detailed answer explanation, rationale, or solution breakdown. (THIS FIELD IS OPTIONAL - set to null if not found in document) "
+            "4. 'remark': Remarks, commentary, notes, scoring hints, or examiner remarks. (THIS FIELD IS OPTIONAL - set to null if not found in document) "
+            "\n"
+            "Other required fields for each question: "
+            "- 'id': unique short string (e.g. 'q_1', 'q_2') "
+            "- 'variableName': valid identifier (e.g. 'Q1', 'Q2', 'VAR_1') "
+            "- 'description': null (no subdescription) "
+            "- 'order': integer (0-indexed) "
+            "- 'validation': {'required': true} (Question and Options are mandatory) "
+            "\n"
+            "Output JSON format: "
+            "{\n"
+            "  \"title\": \"Title of the questionnaire from document header or filename\",\n"
+            "  \"description\": \"Brief description or instructions\",\n"
+            "  \"sections\": [\n"
+            "    {\"id\": \"sec_1\", \"title\": \"General Assessment\", \"description\": null, \"order\": 0}\n"
+            "  ],\n"
+            "  \"questions\": [\n"
+            "    {\n"
+            "      \"id\": \"q_1\",\n"
+            "      \"variableName\": \"Q1\",\n"
+            "      \"type\": \"single_choice\",\n"
+            "      \"text\": \"Question text here\",\n"
+            "      \"explanation\": \"Explanation here or null\",\n"
+            "      \"remark\": \"Remark here or null\",\n"
+            "      \"order\": 0,\n"
+            "      \"validation\": {\"required\": true},\n"
+            "      \"choices\": [\n"
+            "        {\"id\": \"c1\", \"code\": \"a\", \"label\": \"a) Option 1\", \"score\": 1.0},\n"
+            "        {\"id\": \"c2\", \"code\": \"b\", \"label\": \"b) Option 2\", \"score\": 2.0},\n"
+            "        {\"id\": \"c3\", \"code\": \"c\", \"label\": \"c) Option 3\", \"score\": 3.0},\n"
+            "        {\"id\": \"c4\", \"code\": \"d\", \"label\": \"d) Option 4\", \"score\": 4.0}\n"
+            "      ]\n"
+            "    }\n"
+            "  ]\n"
+            "}"
+        )
+
+        prompt = f"Uploaded File: {filename or 'Questionnaire_Document.pdf'}\n\nDocument Text Content:\n{doc_sample}"
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        req_body = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.1,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                resp = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=req_body)
+                if resp.status_code != 200:
+                    raise AIExecutionError(f"OpenAI API returned HTTP {resp.status_code}: {resp.text}")
+                data = resp.json()
+
+            raw_text = data["choices"][0]["message"]["content"]
+            return json.loads(raw_text)
+        except Exception as exc:
+            if isinstance(exc, (AIExecutionError, AIProviderNotConfiguredError)):
+                raise
+            raise AIExecutionError(f"OpenAI question document extraction failed: {str(exc)}") from exc
+
+
+
+    async def extract_questionnaire_from_image(
+        self,
+        image_data_uri: str,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        system_instruction = (
+            "You are an expert psychometrician and visual assessment document parser. "
+            "Your task is to examine the provided question sheet / test paper / survey image, "
+            "extract every question from the image, and format them into the standardized questionnaire template. "
+            "\n"
+            "CRITICAL TEMPLATE FORMAT REQUIREMENTS: "
+            "Every question in the template MUST strictly contain these 4 fields: "
+            "1. 'text': The question statement / problem prompt. (THIS FIELD IS MANDATORY) "
+            "2. 'choices': List of options with radio buttons. (THIS FIELD IS MANDATORY) "
+            "   - 'type' must be 'single_choice'. "
+            "   - Options must strictly be in a, b, c format: 'code': 'a', 'b', 'c', 'd', ... and 'label': 'a) ...', 'b) ...', 'c) ...', 'd) ...'. "
+            "   - Extract all options presented in the document (supports 6 options for maturity/governance rubrics: 1. Not available [score 0], 2. Initial [score 2], 3. Partially implemented [score 4], 4. Implemented [score 6], 5. Consistently implemented [score 8], 6. Mature / exemplary [score 10]). Include 'score' property for each choice (e.g. 0, 2, 4, 6, 8, 10). If no options are given, generate 6 standard maturity rubric options with scores 0, 2, 4, 6, 8, 10. "
+            "3. 'explanation': Detailed answer explanation, rationale, or solution breakdown. (THIS FIELD IS OPTIONAL - set to null if not found in image) "
+            "4. 'remark': Remarks, commentary, notes, scoring hints, or examiner remarks. (THIS FIELD IS OPTIONAL - set to null if not found in image) "
+            "\n"
+            "Other required fields for each question: "
+            "- 'id': unique short string (e.g. 'q_1', 'q_2') "
+            "- 'variableName': valid identifier (e.g. 'Q1', 'Q2', 'VAR_1') "
+            "- 'description': null (no subdescription) "
+            "- 'order': integer (0-indexed) "
+            "- 'validation': {'required': true} (Question and Options are mandatory) "
+            "\n"
+            "Output JSON format: "
+            "{\n"
+            "  \"title\": \"Title of the questionnaire from image or filename\",\n"
+            "  \"description\": \"Brief overview of the questions in the image\",\n"
+            "  \"sections\": [\n"
+            "    {\"id\": \"sec_1\", \"title\": \"General Assessment\", \"description\": null, \"order\": 0}\n"
+            "  ],\n"
+            "  \"questions\": [\n"
+            "    {\n"
+            "      \"id\": \"q_1\",\n"
+            "      \"variableName\": \"Q1\",\n"
+            "      \"type\": \"single_choice\",\n"
+            "      \"text\": \"Question text here\",\n"
+            "      \"explanation\": \"Explanation here or null\",\n"
+            "      \"remark\": \"Remark here or null\",\n"
+            "      \"order\": 0,\n"
+            "      \"validation\": {\"required\": true},\n"
+            "      \"choices\": [\n"
+            "        {\"id\": \"c1\", \"code\": \"a\", \"label\": \"a) Option 1\", \"score\": 1.0},\n"
+            "        {\"id\": \"c2\", \"code\": \"b\", \"label\": \"b) Option 2\", \"score\": 2.0},\n"
+            "        {\"id\": \"c3\", \"code\": \"c\", \"label\": \"c) Option 3\", \"score\": 3.0},\n"
+            "        {\"id\": \"c4\", \"code\": \"d\", \"label\": \"d) Option 4\", \"score\": 4.0}\n"
+            "      ]\n"
+            "    }\n"
+            "  ]\n"
+            "}"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        req_body = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Please parse and extract all questions from this image document ({filename or 'questions.png'}).",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_data_uri,
+                                "detail": "high",
+                            },
+                        },
+                    ],
+                },
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.1,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                resp = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=req_body)
+                if resp.status_code != 200:
+                    raise AIExecutionError(f"OpenAI Vision API returned HTTP {resp.status_code}: {resp.text}")
+                data = resp.json()
+
+            raw_text = data["choices"][0]["message"]["content"]
+            return json.loads(raw_text)
+        except Exception as exc:
+            if isinstance(exc, (AIExecutionError, AIProviderNotConfiguredError)):
+                raise
+            raise AIExecutionError(f"OpenAI image question extraction failed: {str(exc)}") from exc
+
 
 def get_ai_provider() -> BaseAIProvider:
     """
@@ -450,4 +712,3 @@ def get_ai_provider() -> BaseAIProvider:
         return OpenAIProvider(api_key=settings.OPENAI_API_KEY, model_name=settings.OPENAI_MODEL)
     else:
         return UnconfiguredAIProvider()
-

@@ -12,6 +12,7 @@ venv/
 ENV/
 
 # Environment files
+.env
 Backend/.env
 Frontend/.env
 *.env.local

@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -12,6 +12,7 @@ from app.schemas.questionnaire import (
     ObjectiveOutcomeMappingSchema,
     PublishQuestionnaireRequest,
     QuestionnaireCreateRequest,
+    QuestionnaireExportExcelRequest,
     QuestionnaireMetricsResponse,
     QuestionnaireResponse,
     QuestionnaireUpdateRequest,
@@ -49,6 +50,56 @@ async def generate_ai_questionnaire(
 ):
     service = QuestionnaireService(db)
     return await service.generate_ai_questionnaire(payload, current_user)
+
+
+
+
+@router.post(
+    "/upload-file",
+    response_model=QuestionnaireResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Upload questions file (PDF, Image, Excel, Word) and extract into questionnaire template",
+)
+async def upload_questions_file(
+    file: UploadFile = File(...),
+    studyId: Optional[uuid.UUID] = Form(None, description="Optional target study ID"),
+    title: Optional[str] = Form(None, description="Optional questionnaire title"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = QuestionnaireService(db)
+    content = await file.read()
+    return await service.create_questionnaire_from_file(
+        file_bytes=content,
+        filename=file.filename or "uploaded_questions",
+        current_user=current_user,
+        study_id=studyId,
+        title=title,
+    )
+
+
+@router.post(
+    "/upload-pdf",
+    response_model=QuestionnaireResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Upload questions PDF and extract into questionnaire template",
+)
+async def upload_questions_pdf(
+    file: UploadFile = File(...),
+    studyId: Optional[uuid.UUID] = Form(None, description="Optional target study ID"),
+    title: Optional[str] = Form(None, description="Optional questionnaire title"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = QuestionnaireService(db)
+    content = await file.read()
+    return await service.create_questionnaire_from_file(
+        file_bytes=content,
+        filename=file.filename or "uploaded_questions.pdf",
+        current_user=current_user,
+        study_id=studyId,
+        title=title,
+    )
 
 
 @router.get(
@@ -230,3 +281,29 @@ async def get_questionnaire_mappings(
     service = QuestionnaireService(db)
     return await service.get_mappings(questionnaire_id, current_user)
 
+
+
+@router.post(
+    "/{questionnaire_id}/export-excel",
+    status_code=status.HTTP_200_OK,
+    summary="Export questionnaire responses, scores, and remarks to styled Excel report",
+)
+async def export_questionnaire_excel(
+    questionnaire_id: uuid.UUID,
+    payload: QuestionnaireExportExcelRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = QuestionnaireService(db)
+    excel_bytes = await service.export_responses_excel(
+        questionnaire_id=questionnaire_id,
+        responses=payload.responses,
+        remarks=payload.remarks,
+        participant_id=payload.participant_id,
+    )
+    filename = f"Assessment_Report_{str(questionnaire_id)[:8]}.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

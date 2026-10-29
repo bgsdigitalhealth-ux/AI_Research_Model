@@ -157,6 +157,21 @@ export function UserProfile() {
                     {isLoggingIn ? 'Authenticating...' : 'Sign In'}
                   </Button>
                 </div>
+
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs text-blue-600 hover:bg-blue-50"
+                    onClick={() => {
+                      setEmail('admin@airesearchflow.org');
+                      setPassword('AdminPassword123!');
+                    }}
+                  >
+                    Use Admin Test Account (admin@airesearchflow.org)
+                  </Button>
+                </div>
               </form>
             </div>
           </div>

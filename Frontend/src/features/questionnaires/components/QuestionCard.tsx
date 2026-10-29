@@ -1,7 +1,5 @@
 import React from 'react';
 import { QuestionItem, QuestionType } from '@/types/questionnaire';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   ChevronUp,
   ChevronDown,
@@ -9,8 +7,8 @@ import {
   Copy,
   GitBranch,
   Sparkles,
-  HelpCircle,
-  Hash
+  Lightbulb,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -35,7 +33,7 @@ const TYPE_BADGE_VARIANTS: Record<QuestionType, { label: string; color: string }
   date: { label: 'Date', color: 'bg-emerald-50 text-emerald-800' },
   time: { label: 'Time', color: 'bg-emerald-50 text-emerald-800' },
   datetime: { label: 'Date/Time', color: 'bg-emerald-50 text-emerald-800' },
-  single_choice: { label: 'Single Choice', color: 'bg-indigo-50 text-indigo-800' },
+  single_choice: { label: 'Single Choice (Radio)', color: 'bg-indigo-50 text-indigo-800' },
   multiple_choice: { label: 'Multiple Choice', color: 'bg-purple-50 text-purple-800' },
   rating_5: { label: '5-Pt Rating', color: 'bg-amber-50 text-amber-800' },
   likert_5: { label: '5-Pt Likert', color: 'bg-amber-50 text-amber-800' },
@@ -65,7 +63,7 @@ export function QuestionCard({
     <div
       onClick={onSelect}
       className={cn(
-        'p-4 rounded-xl border transition-all cursor-pointer space-y-3 relative',
+        'p-4 rounded-xl border transition-all cursor-pointer space-y-3.5 relative',
         isSelected
           ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/15 shadow-sm'
           : 'border-slate-200 bg-white hover:border-slate-300 shadow-xs'
@@ -100,7 +98,7 @@ export function QuestionCard({
             </div>
           )}
 
-          <div className="space-y-1">
+          <div className="space-y-1.5 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
                 #{index + 1} {question.variableName}
@@ -110,9 +108,17 @@ export function QuestionCard({
                 {typeMeta.label}
               </span>
 
-              {question.validation.required && (
-                <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
-                  * Required
+              {/* Mandatory Template Field Badge */}
+              <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/60">
+                * Mandatory: Question & Options
+              </span>
+
+
+
+              {question.remark && (
+                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60 flex items-center gap-1">
+                  <MessageSquare className="h-2.5 w-2.5 text-amber-600" />
+                  <span>Remark</span>
                 </span>
               )}
 
@@ -126,23 +132,25 @@ export function QuestionCard({
               {question.isAiGenerated && (
                 <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">
                   <Sparkles className="h-3 w-3" />
-                  <span>AI Draft</span>
+                  <span>AI Template</span>
                 </span>
               )}
             </div>
 
-            <p className={cn(
-              'text-xs text-slate-900 leading-relaxed font-medium',
-              isHeading && 'text-sm font-bold text-slate-900'
-            )}>
-              {question.text || <span className="text-slate-400 italic">Untitled question</span>}
-            </p>
-
-            {question.description && (
-              <p className="text-[11px] text-slate-500 italic">
-                {question.description}
+            {/* Template Field 1: Question (Mandatory) */}
+            <div className="space-y-0.5">
+              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wide flex items-center gap-1">
+                Question <span className="text-rose-500 font-bold">*</span>
+              </span>
+              <p className={cn(
+                'text-xs text-slate-900 leading-relaxed font-semibold',
+                isHeading && 'text-sm font-bold text-slate-900'
+              )}>
+                {question.text || <span className="text-slate-400 italic">Untitled question</span>}
               </p>
-            )}
+            </div>
+
+
           </div>
         </div>
 
@@ -174,26 +182,61 @@ export function QuestionCard({
         )}
       </div>
 
-      {/* Choices Preview if Choice Type */}
+      {/* Template Field 2: Options (Mandatory) with Radio Buttons in a, b, c format */}
       {question.choices && question.choices.length > 0 && !isHeading && (
-        <div className="pt-2 border-t border-slate-100 flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] text-slate-400 uppercase font-semibold">Options:</span>
-          {question.choices.slice(0, 5).map((opt) => (
-            <span
-              key={opt.id}
-              className="text-[10px] text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md"
-            >
-              {opt.label} ({opt.code})
+        <div className="pt-2 border-t border-slate-100 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wide flex items-center gap-1">
+              Options (Single Choice Radio) <span className="text-rose-500 font-bold">*</span>
             </span>
-          ))}
-          {question.choices.length > 5 && (
-            <span className="text-[10px] text-slate-400">
-              +{question.choices.length - 5} more
-            </span>
-          )}
+            <span className="text-[10px] text-slate-400 font-medium">Mandatory</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {question.choices.map((opt, i) => {
+              const letter = String.fromCharCode(97 + i); // a, b, c, d
+              let label = opt.label;
+              if (!label.toLowerCase().startsWith(`${letter})`)) {
+                const clean = label.replace(/^[0-9a-zA-Z][\.\)\-]\s*/, '');
+                label = `${letter}) ${clean}`;
+              }
+              return (
+                <div
+                  key={opt.id || i}
+                  className="flex items-center gap-2 p-1.5 px-2.5 rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-800"
+                >
+                  <input
+                    type="radio"
+                    readOnly
+                    checked={false}
+                    name={`preview_radio_${question.id}`}
+                    className="h-3.5 w-3.5 text-blue-600 border-slate-300 focus:ring-blue-500 cursor-default"
+                  />
+                  <span className="font-medium text-[11px] flex-1">{label}</span>
+
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+
+
+      {/* Template Field 4: Remark (Optional) */}
+      {question.remark && (
+        <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-amber-950 text-xs space-y-0.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase text-amber-800 tracking-wider">
+              <MessageSquare className="h-3 w-3 text-amber-600" />
+              <span>Remark</span>
+            </div>
+            <span className="text-[10px] text-amber-600/80 font-medium">Optional</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-amber-900 pt-0.5">
+            {question.remark}
+          </p>
         </div>
       )}
     </div>
   );
 }
-

@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useQuestionnaireDetail } from '@/hooks/useQuestionnaires';
+import { questionnairesApi } from '@/api/questionnairesApi';
 import { StatusState } from '@/components/shared/StatusState';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/components/ui/use-toast';
 import {
   QuestionItem,
   ConditionalLogic,
@@ -23,7 +25,14 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
-  Send
+  Send,
+  ArrowRight,
+  ShieldCheck,
+  FileSpreadsheet,
+  Download,
+  MessageSquare,
+  Award,
+  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,13 +40,16 @@ type DeviceMode = 'desktop' | 'tablet' | 'mobile';
 
 export function QuestionnairePreviewView() {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
   const { data: questionnaire, isLoading, isUnavailable, isError, errorDetail, refetch } =
     useQuestionnaireDetail(id || '');
 
   const [deviceMode, setDeviceMode] = useState<DeviceMode>('desktop');
   const [responses, setResponses] = useState<Record<string, unknown>>({});
+  const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submittedSuccessfully, setSubmittedSuccessfully] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const questions = questionnaire?.questions || [];
   const sections = questionnaire?.sections || [];
@@ -93,7 +105,6 @@ export function QuestionnairePreviewView() {
 
   const handleResponseChange = (questionId: string, value: unknown) => {
     setResponses((prev) => ({ ...prev, [questionId]: value }));
-    // Clear validation error when modified
     if (validationErrors[questionId]) {
       setValidationErrors((prev) => {
         const next = { ...prev };
@@ -103,24 +114,95 @@ export function QuestionnairePreviewView() {
     }
   };
 
+  const handleRemarkChange = (questionId: string, text: string) => {
+    setRemarks((prev) => ({ ...prev, [questionId]: text }));
+  };
+
   const handleReset = () => {
     setResponses({});
+    setRemarks({});
     setValidationErrors({});
     setSubmittedSuccessfully(false);
   };
+
+  // Dynamic Real-Time Score & Maturity Benchmark Calculation (Image 2)
+  const scoreStats = useMemo(() => {
+    let earned = 0;
+    let maxPossible = 0;
+    let answeredCount = 0;
+    let totalQuestionsCount = 0;
+
+    questions.forEach((q) => {
+      if (q.type === 'section_heading') return;
+      if (!isQuestionVisible(q)) return;
+
+      totalQuestionsCount += 1;
+      const val = responses[q.id];
+      let questionMax = 0;
+
+      if (q.choices && q.choices.length > 0) {
+        q.choices.forEach((c, idx) => {
+          const fallback = q.choices!.length === 6 ? idx * 2 : idx + 1;
+          const sc = c.score !== undefined ? c.score : fallback;
+          if (sc > questionMax) questionMax = sc;
+
+          if (val !== undefined && String(val).toLowerCase() === String(c.code).toLowerCase()) {
+            earned += sc;
+            answeredCount += 1;
+          }
+        });
+      } else {
+        questionMax = 10;
+        if (val !== undefined && val !== '') {
+          answeredCount += 1;
+        }
+      }
+
+      maxPossible += (questionMax > 0 ? questionMax : 10);
+    });
+
+    const percentage = maxPossible > 0 ? (earned / maxPossible) * 100 : 0;
+    let benchmarkLevel = 'Not available (Score 0)';
+    let levelBadgeColor = 'bg-slate-100 text-slate-700 border-slate-300';
+
+    if (percentage >= 90) {
+      benchmarkLevel = 'Mature / exemplary (Score 10)';
+      levelBadgeColor = 'bg-purple-50 text-purple-800 border-purple-300';
+    } else if (percentage >= 70) {
+      benchmarkLevel = 'Consistently implemented (Score 8)';
+      levelBadgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-300';
+    } else if (percentage >= 50) {
+      benchmarkLevel = 'Implemented (Score 6)';
+      levelBadgeColor = 'bg-blue-50 text-blue-800 border-blue-300';
+    } else if (percentage >= 30) {
+      benchmarkLevel = 'Partially implemented (Score 4)';
+      levelBadgeColor = 'bg-amber-50 text-amber-800 border-amber-300';
+    } else if (percentage >= 10) {
+      benchmarkLevel = 'Initial (Score 2)';
+      levelBadgeColor = 'bg-orange-50 text-orange-800 border-orange-300';
+    }
+
+    return {
+      earned,
+      maxPossible,
+      answeredCount,
+      totalQuestionsCount,
+      percentage,
+      benchmarkLevel,
+      levelBadgeColor,
+    };
+  }, [questions, responses]);
 
   const handleSubmitPreview = (e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
 
     questions.forEach((q) => {
-      // Only validate if question is visible
       if (!isQuestionVisible(q)) return;
       if (q.type === 'section_heading') return;
 
       const val = responses[q.id];
 
-      // Required check
       if (q.validation.required) {
         if (
           val === undefined ||
@@ -132,35 +214,120 @@ export function QuestionnairePreviewView() {
           return;
         }
       }
-
-      // Min/Max numeric
-      if (['integer', 'decimal', 'rating_5'].includes(q.type) && val !== undefined && val !== '') {
-        const num = Number(val);
-        if (q.validation.min !== undefined && num < q.validation.min) {
-          errors[q.id] = `Value cannot be less than ${q.validation.min}.`;
-        }
-        if (q.validation.max !== undefined && num > q.validation.max) {
-          errors[q.id] = `Value cannot be greater than ${q.validation.max}.`;
-        }
-      }
-
-      // Min/Max length text
-      if (['short_text', 'long_text'].includes(q.type) && typeof val === 'string' && val) {
-        if (q.validation.minLength !== undefined && val.length < q.validation.minLength) {
-          errors[q.id] = `Must be at least ${q.validation.minLength} characters.`;
-        }
-        if (q.validation.maxLength !== undefined && val.length > q.validation.maxLength) {
-          errors[q.id] = `Cannot exceed ${q.validation.maxLength} characters.`;
-        }
-      }
     });
 
     setValidationErrors(errors);
 
     if (Object.keys(errors).length === 0) {
       setSubmittedSuccessfully(true);
+      toast({
+        title: 'Submission Evaluated',
+        description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%). Maturity: ${scoreStats.benchmarkLevel}. You can now export the Excel report.`,
+        variant: 'success',
+      });
     } else {
       setSubmittedSuccessfully(false);
+    }
+  };
+
+  // Export to Excel (.xlsx) matching Image 1 & Image 2
+  const handleExportExcel = async () => {
+    if (!questionnaire) return;
+    try {
+      setIsExporting(true);
+
+      // Attempt backend API export first
+      try {
+        const blob = await questionnairesApi.exportResponsesExcel(questionnaire.id, {
+          responses,
+          remarks,
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${questionnaire.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Score_Report.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+        toast({
+          title: 'Excel Report Downloaded',
+          description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%) exported successfully.`,
+          variant: 'success',
+        });
+        return;
+      } catch (backendErr) {
+        console.warn('Backend export failed, falling back to client-side XLSX generation', backendErr);
+      }
+
+      // Client-side XLSX generation fallback
+      const XLSX = await import('xlsx');
+      const rows: any[][] = [];
+
+      // Header Banner
+      rows.push([`${questionnaire.title.toUpperCase()} - ASSESSMENT REPORT`, '', '', '', '']);
+      rows.push([`Version: v${questionnaire.version} | Generated: ${new Date().toISOString()}`, '', '', '', '']);
+      rows.push(['']);
+      // Columns matching Image 1
+      rows.push(['No.', 'Question', 'Response (select one)', 'Score', 'Remarks']);
+
+      let qCounter = 0;
+      questions.forEach((q) => {
+        if (q.type === 'section_heading') return;
+        qCounter += 1;
+        const val = responses[q.id];
+        let chosenLabel = '(No response selected)';
+        let chosenScore = 0;
+
+        if (q.choices && q.choices.length > 0) {
+          q.choices.forEach((c, idx) => {
+            const fallback = q.choices!.length === 6 ? idx * 2 : idx + 1;
+            const sc = c.score !== undefined ? c.score : fallback;
+            if (val !== undefined && String(val).toLowerCase() === String(c.code).toLowerCase()) {
+              chosenLabel = c.label;
+              chosenScore = sc;
+            }
+          });
+        }
+
+        const userRemark = remarks[q.id] || q.remark || '';
+        // Show score only if question was selected/answered
+        const displayScore = chosenScore !== 0 || val !== undefined ? chosenScore : '';
+        rows.push([qCounter, q.text, chosenLabel, displayScore, userRemark]);
+      });
+
+      // Total rows matching Image 2
+      rows.push(['']);
+      rows.push(['TOTAL SCORE', '', '', scoreStats.earned, `Earned ${scoreStats.earned} out of ${scoreStats.maxPossible} maximum points`]);
+      rows.push(['PERCENTAGE ACHIEVED', '', '', `${scoreStats.percentage.toFixed(1)}%`, '']);
+      rows.push(['OVERALL MATURITY LEVEL', '', '', scoreStats.benchmarkLevel, 'Standardized 6-Level Maturity Framework Benchmark']);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      worksheet['!cols'] = [
+        { wch: 8 },
+        { wch: 52 },
+        { wch: 30 },
+        { wch: 16 },
+        { wch: 38 },
+      ];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Score Report');
+      XLSX.writeFile(workbook, `${questionnaire.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Score_Report.xlsx`);
+
+      toast({
+        title: 'Excel Report Downloaded',
+        description: `Exported ${qCounter} questions with total score ${scoreStats.earned} / ${scoreStats.maxPossible}.`,
+        variant: 'success',
+      });
+    } catch (err: unknown) {
+      toast({
+        title: 'Export Failed',
+        description: (err as Error)?.message || 'Failed to generate Excel report.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -168,89 +335,37 @@ export function QuestionnairePreviewView() {
     const val = responses[q.id];
 
     switch (q.type) {
-      case 'short_text':
-        return (
-          <input
-            type="text"
-            value={String(val ?? '')}
-            onChange={(e) => handleResponseChange(q.id, e.target.value)}
-            placeholder="Type your answer here..."
-            className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-        );
-
-      case 'long_text':
-        return (
-          <textarea
-            rows={3}
-            value={String(val ?? '')}
-            onChange={(e) => handleResponseChange(q.id, e.target.value)}
-            placeholder="Type detailed response..."
-            className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-        );
-
-      case 'integer':
-      case 'decimal':
-        return (
-          <input
-            type="number"
-            step={q.type === 'decimal' ? '0.01' : '1'}
-            value={String(val ?? '')}
-            onChange={(e) => handleResponseChange(q.id, e.target.value)}
-            placeholder="Enter numerical value..."
-            className="w-48 rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-        );
-
-      case 'date':
-        return (
-          <input
-            type="date"
-            value={String(val ?? '')}
-            onChange={(e) => handleResponseChange(q.id, e.target.value)}
-            className="w-48 rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-        );
-
-      case 'time':
-        return (
-          <input
-            type="time"
-            value={String(val ?? '')}
-            onChange={(e) => handleResponseChange(q.id, e.target.value)}
-            className="w-40 rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-        );
-
-      case 'datetime':
-        return (
-          <input
-            type="datetime-local"
-            value={String(val ?? '')}
-            onChange={(e) => handleResponseChange(q.id, e.target.value)}
-            className="w-56 rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-        );
-
       case 'single_choice':
         return (
           <div className="space-y-2">
-            {(q.choices || []).map((choice) => (
-              <label
-                key={choice.id}
-                className="flex items-center gap-2.5 p-2 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 cursor-pointer text-xs text-slate-800"
-              >
-                <input
-                  type="radio"
-                  name={`q_${q.id}`}
-                  checked={val === choice.code}
-                  onChange={() => handleResponseChange(q.id, choice.code)}
-                  className="h-4 w-4 text-blue-600 border-slate-300 focus:ring-blue-500"
-                />
-                <span className="font-medium">{choice.label}</span>
-              </label>
-            ))}
+            {(q.choices || []).map((choice, i) => {
+              const fallback = q.choices!.length === 6 ? i * 2 : i + 1;
+              const choiceScore = choice.score !== undefined ? choice.score : fallback;
+              const isSelected = val === choice.code;
+
+              return (
+                <label
+                  key={choice.id || i}
+                  className={cn(
+                    'flex items-center justify-between gap-3 p-2.5 rounded-lg border cursor-pointer text-xs transition-all',
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-950 ring-1 ring-blue-500/20'
+                      : 'border-slate-200 bg-slate-50/40 hover:bg-slate-50 text-slate-800'
+                  )}
+                >
+                  <div className="flex items-center gap-2.5 flex-1">
+                    <input
+                      type="radio"
+                      name={`q_${q.id}`}
+                      checked={isSelected}
+                      onChange={() => handleResponseChange(q.id, choice.code)}
+                      className="h-4 w-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="font-medium text-[11px]">{choice.label}</span>
+                  </div>
+                </label>
+              );
+            })}
           </div>
         );
 
@@ -281,6 +396,41 @@ export function QuestionnairePreviewView() {
               );
             })}
           </div>
+        );
+
+      case 'short_text':
+        return (
+          <input
+            type="text"
+            value={String(val ?? '')}
+            onChange={(e) => handleResponseChange(q.id, e.target.value)}
+            placeholder="Type your answer here..."
+            className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+          />
+        );
+
+      case 'long_text':
+        return (
+          <textarea
+            rows={3}
+            value={String(val ?? '')}
+            onChange={(e) => handleResponseChange(q.id, e.target.value)}
+            placeholder="Type detailed response..."
+            className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-sans"
+          />
+        );
+
+      case 'integer':
+      case 'decimal':
+        return (
+          <input
+            type="number"
+            step={q.type === 'decimal' ? '0.01' : '1'}
+            value={String(val ?? '')}
+            onChange={(e) => handleResponseChange(q.id, e.target.value)}
+            placeholder="Enter numerical value..."
+            className="w-48 rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+          />
         );
 
       case 'rating_5':
@@ -327,7 +477,7 @@ export function QuestionnairePreviewView() {
   return (
     <PageContainer
       title="Live Participant Survey Preview"
-      description={`Simulation of participant-facing UI with real-time conditional skip logic & input validation.`}
+      description="Simulation of participant-facing UI with real-time scoring, dynamic remark fields, and Excel export."
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Questionnaires', path: '/questionnaires' },
@@ -379,15 +529,34 @@ export function QuestionnairePreviewView() {
             </button>
           </div>
 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Export to Excel</span>
+          </Button>
+
           <Button variant="outline" size="sm" onClick={handleReset} className="gap-1.5">
             <RotateCcw className="h-3.5 w-3.5" />
             <span>Reset Answers</span>
           </Button>
 
           <Link to={`/questionnaires/${id}/builder`}>
-            <Button size="sm" className="gap-1.5">
+            <Button variant="outline" size="sm" className="gap-1.5">
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Builder</span>
+            </Button>
+          </Link>
+
+          <Link to={`/questionnaires/${id}/review`}>
+            <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
+              <ShieldCheck className="h-4 w-4" />
+              <span>Next: Review & Sign-Off</span>
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
         </div>
@@ -428,7 +597,6 @@ export function QuestionnairePreviewView() {
             description="Add questions in the visual builder to view participant preview."
           />
         ) : (
-          /* Participant Simulation Container */
           <div className="flex justify-center">
             <div
               className={cn(
@@ -440,13 +608,37 @@ export function QuestionnairePreviewView() {
             >
               {/* Submission Feedback in Preview Mode */}
               {submittedSuccessfully && (
-                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5 animate-in fade-in">
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-3 animate-in fade-in">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold">Preview Submission Successful</p>
-                    <p className="text-[11px] leading-relaxed">
-                      All required questions and validation rules passed. In production mode, responses are encrypted and submitted to the data collection pipeline.
+                  <div className="space-y-2 flex-1">
+                    <p className="font-bold text-sm text-emerald-950">Survey Submission Successful & Evaluated</p>
+                    <p className="text-[11px] leading-relaxed text-emerald-800">
+                      All responses and remarks have been successfully recorded. Click below to export the score-wise Excel report.
                     </p>
+                    <div className="pt-2 flex items-center gap-2 flex-wrap">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleExportExcel}
+                        disabled={isExporting}
+                        className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs"
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        <span>Export Score-Wise Excel Report (.xlsx)</span>
+                      </Button>
+                      <Link to={`/questionnaires/${id}/review`}>
+                        <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>Next: Review & Sign-Off</span>
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                      <Link to={`/questionnaires/${id}/builder`}>
+                        <Button variant="outline" size="sm" className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs">
+                          <span>Return to Builder</span>
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               )}
@@ -457,7 +649,7 @@ export function QuestionnairePreviewView() {
                   <div className="space-y-1">
                     <p className="font-bold">Form Validation Incomplete</p>
                     <p className="text-[11px]">
-                      Please resolve {Object.keys(validationErrors).length} required or out-of-range response(s) highlighted below.
+                      Please resolve {Object.keys(validationErrors).length} required response(s) highlighted below.
                     </p>
                   </div>
                 </div>
@@ -511,9 +703,11 @@ export function QuestionnairePreviewView() {
                           hasError ? 'border-red-300 ring-2 ring-red-500/20' : 'border-slate-200'
                         )}
                       >
-                        <CardContent className="p-5 space-y-3">
+                        <CardContent className="p-5 space-y-3.5">
+                          {/* Question Number and Prompt */}
                           <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-900 block leading-snug">
+                              <span className="font-bold text-blue-600 mr-1.5">#{idx + 1}</span>
                               <span>{q.text}</span>
                               {q.validation.required && (
                                 <span className="text-red-500 ml-1 font-bold">*</span>
@@ -526,7 +720,28 @@ export function QuestionnairePreviewView() {
                             )}
                           </div>
 
+                          {/* Options Radio List */}
                           <div className="pt-1">{renderQuestionInput(q)}</div>
+
+
+
+                          {/* Dynamic Remark Field (Image 1 Requirement) */}
+                          <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                                <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                                <span>Remark & Explanation</span>
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-medium">Dynamic User Entry</span>
+                            </div>
+                            <textarea
+                              rows={2}
+                              value={remarks[q.id] || ''}
+                              onChange={(e) => handleRemarkChange(q.id, e.target.value)}
+                              placeholder="Type remarks, evidence, notes, or explanation for this question..."
+                              className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/40 font-sans"
+                            />
+                          </div>
 
                           {hasError && (
                             <p className="text-[11px] font-semibold text-red-600 flex items-center gap-1 mt-1">
@@ -540,12 +755,40 @@ export function QuestionnairePreviewView() {
                   })}
                 </div>
 
-                {/* Submit Test in Preview */}
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
-                    <Send className="h-4 w-4" />
-                    <span>Test Submit Response</span>
-                  </Button>
+                {/* Submit and Next Actions in Preview */}
+                <div className="flex items-center justify-between pt-2">
+                  <Link to={`/questionnaires/${id}/builder`}>
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5">
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>Back to Builder</span>
+                    </Button>
+                  </Link>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportExcel}
+                      disabled={isExporting}
+                      className="gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Export to Excel</span>
+                    </Button>
+
+                    <Button type="submit" variant={submittedSuccessfully ? 'outline' : 'default'} className="gap-2">
+                      <Send className="h-4 w-4" />
+                      <span>{submittedSuccessfully ? 'Re-Submit & Calculate' : 'Submit & Calculate Score'}</span>
+                    </Button>
+
+                    <Link to={`/questionnaires/${id}/review`}>
+                      <Button type="button" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
+                        <span>Next: Review & Sign-Off</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </form>
             </div>
@@ -555,4 +798,3 @@ export function QuestionnairePreviewView() {
     </PageContainer>
   );
 }
-

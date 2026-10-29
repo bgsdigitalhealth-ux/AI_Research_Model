@@ -376,7 +376,7 @@ class StudyService:
             for st, lbl, col in status_order
         ]
 
-        return StudyStatusSummaryResponse(total=total, byStatus=by_status)
+        return StudyStatusSummaryResponse(total=total, by_status=by_status)
 
     def _to_study_response(self, study: Study) -> StudyResponse:
         pi_name = study.principal_investigator.full_name if study.principal_investigator else None

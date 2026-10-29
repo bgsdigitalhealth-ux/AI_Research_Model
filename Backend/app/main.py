@@ -51,12 +51,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Configuration
+# CORS Configuration - supports localhost, configured origins, and all Vercel deployment URLs
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -110,7 +111,18 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Health Check Endpoints
+# Health Check & Root Endpoints
+@app.get("/", tags=["Health & Status"], summary="Root Service Status")
+async def root():
+    return {
+        "status": "online",
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT,
+        "docs": f"{settings.API_V1_STR}/docs",
+    }
+
+
 @app.get("/health", tags=["Health & Status"], summary="Liveness Probe")
 async def health():
     return {
@@ -141,5 +153,29 @@ async def ready():
         )
 
 
-# Register API v1 Routers
+# Register API Routers (support both /api/v1 and /api for seamless frontend client compatibility)
 app.include_router(api_v1_router, prefix=settings.API_V1_STR)
+if settings.API_V1_STR != "/api":
+    app.include_router(api_v1_router, prefix="/api")
+
+
+@app.get("/api/config", tags=["Configuration"])
+@app.get(f"{settings.API_V1_STR}/config", tags=["Configuration"])
+async def get_product_config():
+    return {
+        "appName": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "features": {
+            "aiAssistant": settings.AI_PROVIDER != "unconfigured",
+            "realTimeNotifications": True,
+            "offlineMode": True,
+            "advancedAnalytics": True,
+        },
+    }
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=settings.DEBUG)

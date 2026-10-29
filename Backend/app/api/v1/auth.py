@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
@@ -97,15 +98,16 @@ async def refresh_token(
     summary="Revoke session and log out",
 )
 async def logout(
-    payload: RefreshTokenRequest,
     request: Request,
+    payload: Optional[RefreshTokenRequest] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
     auth_service = AuthService(db)
-    await auth_service.logout(payload.refresh_token, current_user.id, ip, ua)
+    if payload and payload.refresh_token:
+        await auth_service.logout(payload.refresh_token, current_user.id, ip, ua)
     return StandardResponse(
         success=True,
         message="Successfully logged out and session revoked",

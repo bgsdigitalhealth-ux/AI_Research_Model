@@ -10,6 +10,8 @@ from app.api.v1.surveys import router as surveys_router
 from app.api.v1.participants import router as participants_router
 from app.api.v1.analysis import router as analysis_router
 from app.api.v1.reports import reports_router, exports_router
+from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.notifications import router as notifications_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -24,3 +26,5 @@ api_v1_router.include_router(participants_router)
 api_v1_router.include_router(analysis_router)
 api_v1_router.include_router(reports_router)
 api_v1_router.include_router(exports_router)
+api_v1_router.include_router(dashboard_router)
+api_v1_router.include_router(notifications_router)

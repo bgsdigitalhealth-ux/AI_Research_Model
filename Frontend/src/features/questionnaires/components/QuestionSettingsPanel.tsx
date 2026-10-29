@@ -20,7 +20,9 @@ import {
   ListPlus,
   Sparkles,
   HelpCircle,
-  Lock
+  Lock,
+  Lightbulb,
+  MessageSquare,
 } from 'lucide-react';
 
 interface QuestionSettingsPanelProps {
@@ -98,10 +100,11 @@ export function QuestionSettingsPanel({
     if (isPublished) return;
     const currentChoices = question.choices || [];
     const nextIdx = currentChoices.length + 1;
+    const letter = String.fromCharCode(96 + nextIdx);
     const newChoice: ChoiceOption = {
       id: `opt_${Date.now()}_${nextIdx}`,
-      code: `OPT_${nextIdx}`,
-      label: `Choice ${nextIdx}`,
+      code: letter,
+      label: `${letter}) Option ${nextIdx}`,
       score: nextIdx,
     };
     handleUpdate({ choices: [...currentChoices, newChoice] });
@@ -121,14 +124,41 @@ export function QuestionSettingsPanel({
     handleUpdate({ choices: filtered });
   };
 
+  const handleFormatChoicesABC = () => {
+    if (isPublished || !question.choices) return;
+    const formatted = question.choices.map((c, i) => {
+      const letter = String.fromCharCode(97 + i);
+      let lbl = c.label;
+      if (!lbl.toLowerCase().startsWith(`${letter})`)) {
+        const clean = lbl.replace(/^[0-9a-zA-Z][\.\)\-]\s*/, '');
+        lbl = `${letter}) ${clean}`;
+      }
+      return { ...c, code: letter, label: lbl };
+    });
+    handleUpdate({ choices: formatted });
+  };
+
+  const handlePopulateMaturityRubric = () => {
+    if (isPublished) return;
+    const maturityDefaults: ChoiceOption[] = [
+      { id: 'mat_1', code: 'a', label: 'a) 1. Not available', score: 0 },
+      { id: 'mat_2', code: 'b', label: 'b) 2. Initial', score: 2 },
+      { id: 'mat_3', code: 'c', label: 'c) 3. Partially implemented', score: 4 },
+      { id: 'mat_4', code: 'd', label: 'd) 4. Implemented', score: 6 },
+      { id: 'mat_5', code: 'e', label: 'e) 5. Consistently implemented', score: 8 },
+      { id: 'mat_6', code: 'f', label: 'f) 6. Mature / exemplary', score: 10 },
+    ];
+    handleUpdate({ choices: maturityDefaults, type: 'single_choice' });
+  };
+
   const handlePopulateLikert = () => {
     if (isPublished) return;
     const likertDefaults: ChoiceOption[] = [
-      { id: 'likert_1', code: 'SD', label: 'Strongly Disagree', score: 1 },
-      { id: 'likert_2', code: 'D', label: 'Disagree', score: 2 },
-      { id: 'likert_3', code: 'N', label: 'Neutral / Undecided', score: 3 },
-      { id: 'likert_4', code: 'A', label: 'Agree', score: 4 },
-      { id: 'likert_5', code: 'SA', label: 'Strongly Agree', score: 5 },
+      { id: 'likert_1', code: 'a', label: 'a) Strongly Disagree', score: 1 },
+      { id: 'likert_2', code: 'b', label: 'b) Disagree', score: 2 },
+      { id: 'likert_3', code: 'c', label: 'c) Neutral / Undecided', score: 3 },
+      { id: 'likert_4', code: 'd', label: 'd) Agree', score: 4 },
+      { id: 'likert_5', code: 'e', label: 'e) Strongly Agree', score: 5 },
     ];
     handleUpdate({ choices: likertDefaults });
   };
@@ -136,8 +166,8 @@ export function QuestionSettingsPanel({
   const handlePopulateYesNo = () => {
     if (isPublished) return;
     const yesNoDefaults: ChoiceOption[] = [
-      { id: 'opt_yes', code: 'YES', label: 'Yes', score: 1 },
-      { id: 'opt_no', code: 'NO', label: 'No', score: 0 },
+      { id: 'opt_yes', code: 'a', label: 'a) Yes', score: 1 },
+      { id: 'opt_no', code: 'b', label: 'b) No', score: 0 },
     ];
     handleUpdate({ choices: yesNoDefaults });
   };
@@ -200,11 +230,16 @@ export function QuestionSettingsPanel({
           </div>
         </div>
 
-        {/* Question Text / Prompt */}
+        {/* Template Field 1: Question Prompt Text (Mandatory) */}
         <div className="space-y-1">
-          <label className="text-[11px] font-semibold text-slate-700">
-            Participant Prompt Text *
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-slate-700">
+              Question Prompt Text <span className="text-rose-500 font-bold">*</span>
+            </label>
+            <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-semibold">
+              Mandatory
+            </span>
+          </div>
           <textarea
             rows={2}
             value={question.text}
@@ -215,20 +250,30 @@ export function QuestionSettingsPanel({
           />
         </div>
 
-        {/* Participant Description / Guidance */}
+
+
+        {/* Template Field 4: Remark (Optional) */}
         <div className="space-y-1">
-          <label className="text-[11px] font-semibold text-slate-700">
-            Participant Guidance / Subtitle (Optional)
-          </label>
-          <input
-            type="text"
-            value={question.description || ''}
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5 text-amber-600" />
+              <span>Remark</span>
+            </label>
+            <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium border border-amber-200/50">
+              Optional
+            </span>
+          </div>
+          <textarea
+            rows={2}
+            value={question.remark || ''}
             disabled={isPublished}
-            onChange={(e) => handleUpdate({ description: e.target.value })}
-            placeholder="e.g. Over the last 2 weeks, how often have you been bothered by..."
-            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            onChange={(e) => handleUpdate({ remark: e.target.value })}
+            placeholder="Add research remarks, reviewer notes, scoring hints, or observations..."
+            className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-sans"
           />
         </div>
+
+
 
         {/* Section Assignment */}
         {sections.length > 0 && (
@@ -258,6 +303,7 @@ export function QuestionSettingsPanel({
             <span className="font-bold text-slate-800 text-xs">
               Response Validation & Constraints
             </span>
+            <span className="text-[10px] text-slate-500 font-medium">Question & Options Mandatory</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -341,15 +387,38 @@ export function QuestionSettingsPanel({
           )}
         </div>
 
-        {/* Response Choices Manager (for Choice / Rating types) */}
+        {/* Template Field 2: Response Choices Manager (Mandatory for Choice types) */}
         {isChoiceType && (
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-800 text-xs">
-                Response Choices ({question.choices?.length || 0})
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-800 text-xs">
+                  Response Options ({question.choices?.length || 0}) <span className="text-rose-500 font-bold">*</span>
+                </span>
+                <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-semibold">
+                  Mandatory
+                </span>
+              </div>
               {!isPublished && (
                 <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleFormatChoicesABC}
+                    className="text-[10px] font-semibold text-blue-600 hover:underline"
+                    title="Format options with a, b, c labels"
+                  >
+                    a, b, c format
+                  </button>
+                  <span className="text-slate-300">·</span>
+                                    <button
+                    type="button"
+                    onClick={handlePopulateMaturityRubric}
+                    className="text-[10px] font-semibold text-emerald-700 hover:underline bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
+                    title="Populate 6-option maturity levels with scores 0, 2, 4, 6, 8, 10"
+                  >
+                    + 6-Level Maturity (0-10)
+                  </button>
+                  <span className="text-slate-300">·</span>
                   <button
                     type="button"
                     onClick={handlePopulateLikert}
@@ -381,12 +450,12 @@ export function QuestionSettingsPanel({
                     disabled={isPublished}
                     onChange={(e) =>
                       handleUpdateChoice(choice.id, {
-                        code: e.target.value.toUpperCase().replace(/\s+/g, '_'),
+                        code: e.target.value.toLowerCase().replace(/\s+/g, '_'),
                       })
                     }
                     placeholder="CODE"
-                    className="w-16 rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] font-mono uppercase"
-                    title="Coded variable value stored in dataset"
+                    className="w-14 rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] font-mono lowercase text-center"
+                    title="Coded variable value stored in dataset (a, b, c...)"
                   />
 
                   <input
@@ -396,23 +465,11 @@ export function QuestionSettingsPanel({
                     onChange={(e) =>
                       handleUpdateChoice(choice.id, { label: e.target.value })
                     }
-                    placeholder="Participant choice label"
+                    placeholder="Participant choice label (e.g. a) Option)"
                     className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
                   />
 
-                  <input
-                    type="number"
-                    value={choice.score ?? ''}
-                    disabled={isPublished}
-                    onChange={(e) =>
-                      handleUpdateChoice(choice.id, {
-                        score: e.target.value === '' ? undefined : Number(e.target.value),
-                      })
-                    }
-                    placeholder="Score"
-                    className="w-14 rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] font-mono text-center"
-                    title="Numerical score weight"
-                  />
+
 
                   {!isPublished && (
                     <button
@@ -478,4 +535,3 @@ export function QuestionSettingsPanel({
     </Card>
   );
 }
-

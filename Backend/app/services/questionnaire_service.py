@@ -163,6 +163,8 @@ class QuestionnaireService:
                 type=qi.type,
                 text=qi.text,
                 description=qi.description,
+                explanation=qi.explanation,
+                remark=qi.remark,
                 section_id=str(qi.section_id) if qi.section_id else None,
                 order=qi.order,
                 validation=QuestionValidationRulesSchema(**(qi.validation or {})),
@@ -258,6 +260,8 @@ class QuestionnaireService:
                 type=q.type,
                 text=q.text,
                 description=q.description,
+                explanation=q.explanation,
+                remark=q.remark,
                 order=q.order or idx,
                 validation=q.validation.model_dump(by_alias=True) if q.validation else {},
                 choices=[c.model_dump(by_alias=True) for c in q.choices] if q.choices else None,
@@ -367,6 +371,8 @@ class QuestionnaireService:
                     type=item.type,
                     text=item.text,
                     description=item.description,
+                    explanation=item.explanation,
+                    remark=item.remark,
                     order=item.order or idx,
                     validation=item.validation.model_dump(by_alias=True) if item.validation else {},
                     choices=[c.model_dump(by_alias=True) for c in item.choices] if item.choices else None,
@@ -440,17 +446,47 @@ class QuestionnaireService:
     async def generate_ai_questionnaire(
         self, payload: AiGenerateQuestionnairePayload, current_user: User
     ) -> QuestionnaireResponse:
-        # Determine target study
-        study_id = payload.study_id
-        if not study_id:
-            # Check if user has an active study
-            accessible = await self._get_accessible_study_ids(current_user)
-            if accessible and len(accessible) > 0:
-                study_id = accessible[0]
-            else:
-                raise InvalidQuestionnaireError("A valid study ID is required to generate an AI questionnaire draft.")
+        from sqlalchemy import select, func
 
-        study = await self._verify_study_permission(study_id, current_user, Permission.QUESTIONNAIRE_BUILD)
+        # Determine target study dynamically
+        study: Optional[Study] = None
+        study_id = payload.study_id
+
+        if study_id:
+            study = await self._verify_study_permission(study_id, current_user, Permission.QUESTIONNAIRE_BUILD)
+        else:
+            # 1. Search for existing study matching title
+            if payload.study_title:
+                stmt = select(Study).where(func.lower(Study.title) == payload.study_title.strip().lower())
+                res = await self.session.execute(stmt)
+                study = res.scalars().first()
+
+            # 2. Search for any accessible or latest existing study
+            if not study:
+                accessible = await self._get_accessible_study_ids(current_user)
+                if accessible and len(accessible) > 0:
+                    study = await self.study_repo.get_study_by_id(accessible[0])
+                else:
+                    stmt = select(Study).order_by(Study.created_at.desc()).limit(1)
+                    res = await self.session.execute(stmt)
+                    study = res.scalars().first()
+
+            # 3. If no study exists at all, dynamically create a new study in PostgreSQL
+            if not study:
+                hex_id = uuid.uuid4().hex[:6].upper()
+                protocol_num = f"AI-{hex_id}"
+                study = Study(
+                    title=payload.study_title or "AI Clinical Research Study",
+                    protocol_number=protocol_num,
+                    status="draft",
+                    created_by_user_id=current_user.id,
+                    principal_investigator_id=current_user.id,
+                    target_participants=100,
+                )
+                self.session.add(study)
+                await self.session.flush()
+
+        study_id = study.id
 
         ai_provider = get_ai_provider()
         gen_data = await ai_provider.generate_questionnaire(payload.model_dump(by_alias=True))
@@ -481,13 +517,14 @@ class QuestionnaireService:
         self.session.add(q)
         await self.session.flush()
 
-        # Add sections
+        # Add sections with unique scoped primary keys
         section_ids_map: Dict[str, str] = {}
         for idx, sec in enumerate(gen_data.get("sections", [])):
             client_sec_id = sec.get("id") or f"sec_{idx + 1}"
-            section_ids_map[client_sec_id] = client_sec_id
+            db_sec_id = f"{q.id.hex[:8]}_{client_sec_id}"
+            section_ids_map[client_sec_id] = db_sec_id
             db_sec = QuestionnaireSection(
-                id=client_sec_id,
+                id=db_sec_id,
                 questionnaire_id=q.id,
                 title=sec.get("title", f"Section {idx + 1}"),
                 description=sec.get("description"),
@@ -496,22 +533,66 @@ class QuestionnaireService:
             self.session.add(db_sec)
         await self.session.flush()
 
-        # Add questions
+        # Add questions with unique scoped primary keys
+        question_ids_map: Dict[str, str] = {}
         for idx, item in enumerate(gen_data.get("questions", [])):
+            client_q_id = item.get("id") or f"q_{idx + 1}"
+            db_q_id = f"{q.id.hex[:8]}_{client_q_id}"
+            question_ids_map[client_q_id] = db_q_id
+
             sec_ref = item.get("sectionId")
             target_sec = section_ids_map.get(sec_ref) if sec_ref else None
+
+            cond_logic = item.get("conditionalLogic")
+            if isinstance(cond_logic, dict) and "rules" in cond_logic:
+                for r in cond_logic.get("rules", []):
+                    if isinstance(r, dict) and "targetQuestionId" in r:
+                        r["targetQuestionId"] = question_ids_map.get(r["targetQuestionId"], r["targetQuestionId"])
+
+            import re
+            q_type = item.get("type", "single_choice")
+            if q_type in ("likert_5", "rating_5"):
+                q_type = "single_choice"
+
+            raw_choices = item.get("choices") or []
+            if not raw_choices and q_type == "single_choice":
+                raw_choices = [
+                    {"code": "a", "label": "a) Strongly Disagree", "score": 1.0},
+                    {"code": "b", "label": "b) Disagree", "score": 2.0},
+                    {"code": "c", "label": "c) Neutral", "score": 3.0},
+                    {"code": "d", "label": "d) Agree", "score": 4.0},
+                    {"code": "e", "label": "e) Strongly Agree", "score": 5.0},
+                ]
+            elif raw_choices and isinstance(raw_choices, list):
+                formatted_choices = []
+                for c_idx, ch in enumerate(raw_choices):
+                    letter = chr(97 + c_idx)
+                    lbl = ch.get("label", "")
+                    if not lbl.lower().startswith(f"{letter})"):
+                        clean_lbl = re.sub(r"^[0-9a-zA-Z][\.\)\-]\s*", "", lbl)
+                        lbl = f"{letter}) {clean_lbl}"
+                    formatted_choices.append({
+                        "id": ch.get("id") or f"c_{c_idx + 1}",
+                        "code": letter,
+                        "label": lbl,
+                        "score": ch.get("score", float(c_idx + 1)),
+                    })
+                raw_choices = formatted_choices
+
             db_q = QuestionItemModel(
-                id=item.get("id") or f"q_{idx + 1}",
+                id=db_q_id,
                 questionnaire_id=q.id,
                 section_id=target_sec,
                 variable_name=item.get("variableName", f"VAR_{idx + 1}").strip(),
-                type=item.get("type", "short_text"),
+                type=q_type,
                 text=item.get("text", f"Question {idx + 1}"),
-                description=item.get("description"),
+                description=None,  # No subdescription for AI generated questions as requested
+                explanation=item.get("explanation"),
+                remark=item.get("remark"),
                 order=item.get("order", idx),
                 validation=item.get("validation", {"required": True}),
-                choices=item.get("choices"),
-                conditional_logic=item.get("conditionalLogic"),
+                choices=raw_choices,
+                conditional_logic=cond_logic,
                 is_ai_generated=True,
                 verified_by_researcher=False,
                 target_objective_id=item.get("targetObjectiveId"),
@@ -519,14 +600,42 @@ class QuestionnaireService:
             )
             self.session.add(db_q)
 
-        # Add mappings
-        for m in gen_data.get("mappings", []):
+        # Add mappings (defensively handle list of objects, list of strings, or dictionary)
+        raw_mappings = gen_data.get("mappings", [])
+        mapping_items = []
+        if isinstance(raw_mappings, dict):
+            for i, (k, v) in enumerate(raw_mappings.items()):
+                mapping_items.append({
+                    "objectiveId": f"OBJ-{i+1}",
+                    "objectiveTitle": str(k),
+                    "outcomeName": str(k),
+                    "coveredQuestionIds": v if isinstance(v, list) else [str(v)],
+                    "isCovered": True,
+                    "coverageNotes": None,
+                })
+        elif isinstance(raw_mappings, list):
+            for i, m in enumerate(raw_mappings):
+                if isinstance(m, dict):
+                    mapping_items.append(m)
+                elif isinstance(m, str):
+                    mapping_items.append({
+                        "objectiveId": f"OBJ-{i+1}",
+                        "objectiveTitle": m,
+                        "outcomeName": m,
+                        "coveredQuestionIds": [],
+                        "isCovered": True,
+                        "coverageNotes": None,
+                    })
+
+        for m in mapping_items:
+            raw_cids = m.get("coveredQuestionIds", [])
+            mapped_cids = [question_ids_map.get(cid, cid) for cid in raw_cids] if isinstance(raw_cids, list) else []
             db_m = QuestionnaireMapping(
                 questionnaire_id=q.id,
                 objective_id=m.get("objectiveId", "OBJ-1"),
                 objective_title=m.get("objectiveTitle", "Primary Objective"),
                 outcome_name=m.get("outcomeName", "Primary Outcome"),
-                covered_question_ids=m.get("coveredQuestionIds", []),
+                covered_question_ids=mapped_cids,
                 is_covered=m.get("isCovered", True),
                 coverage_notes=m.get("coverageNotes"),
             )
@@ -542,7 +651,7 @@ class QuestionnaireService:
             study_id=q.study_id,
             entity_type="questionnaire",
             entity_id=str(q.id),
-            details={"questions_generated": len(q.questions), "model": getattr(ai_provider, "model_name", "unknown")},
+            details={"questions_generated": len(created.questions) if created else 0, "model": getattr(ai_provider, "model_name", "unknown")},
         )
         return self.serialize_questionnaire(created)
 
@@ -730,6 +839,8 @@ class QuestionnaireService:
                 type=q.type,
                 text=q.text,
                 description=q.description,
+                explanation=q.explanation,
+                remark=q.remark,
                 order=q.order,
                 validation=q.validation,
                 choices=q.choices,
@@ -839,3 +950,404 @@ class QuestionnaireService:
             average_completion_rate=metrics_dict.get("average_completion_rate", 0.0),
             recent_questionnaires=recent_models,
         )
+
+    async def create_questionnaire_from_file(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        current_user: User,
+        study_id: Optional[uuid.UUID] = None,
+        title: Optional[str] = None,
+    ) -> QuestionnaireResponse:
+        from app.services.document_parser import DocumentParserService
+        from app.core.exceptions import FileValidationError
+        from sqlalchemy import select
+
+        ai_provider = get_ai_provider()
+        gen_data: Dict[str, Any] = {}
+
+        if DocumentParserService.is_image_file(filename):
+            image_uri = DocumentParserService.get_image_data_uri(file_bytes, filename)
+            gen_data = await ai_provider.extract_questionnaire_from_image(image_uri, filename)
+        else:
+            full_text, _ = DocumentParserService.parse_document(filename, file_bytes)
+            if not full_text or len(full_text.strip()) < 5:
+                raise FileValidationError(f"Could not extract readable text or questions from '{filename}'.")
+            gen_data = await ai_provider.extract_questionnaire_from_document(full_text, filename)
+
+        # Determine target study dynamically
+        study: Optional[Study] = None
+        if study_id:
+            study = await self._verify_study_permission(study_id, current_user, Permission.QUESTIONNAIRE_BUILD)
+        else:
+            accessible = await self._get_accessible_study_ids(current_user)
+            if accessible and len(accessible) > 0:
+                study = await self.study_repo.get_study_by_id(accessible[0])
+            else:
+                stmt = select(Study).order_by(Study.created_at.desc()).limit(1)
+                res = await self.session.execute(stmt)
+                study = res.scalars().first()
+
+            if not study:
+                hex_id = uuid.uuid4().hex[:6].upper()
+                protocol_num = f"AI-{hex_id}"
+                clean_title = (title or filename.rsplit(".", 1)[0] or "Clinical Research Study").strip()
+                study = Study(
+                    title=f"{clean_title} Study",
+                    protocol_number=protocol_num,
+                    status="draft",
+                    created_by_user_id=current_user.id,
+                    principal_investigator_id=current_user.id,
+                    target_participants=100,
+                )
+                self.session.add(study)
+                await self.session.flush()
+
+        doc_title = title or gen_data.get("title") or filename.rsplit(".", 1)[0]
+        description = gen_data.get("description") or f"Questions extracted from {filename}."
+
+        q = Questionnaire(
+            study_id=study.id,
+            title=doc_title,
+            description=description,
+            version="1.0",
+            version_number=1,
+            status="draft",
+            is_ai_generated=True,
+            ai_generation_metadata={
+                "provider": getattr(ai_provider, "model_name", "ai-adapter"),
+                "sourceFile": filename,
+                "fileSize": len(file_bytes),
+            },
+            scientific_validation_claim="Questions extracted from source device file.",
+            is_published_immutable=False,
+            created_by_user_id=current_user.id,
+        )
+        self.session.add(q)
+        await self.session.flush()
+
+        # Sections
+        section_ids_map: Dict[str, str] = {}
+        raw_sections = gen_data.get("sections") or [{"id": "sec_1", "title": "General Assessment", "order": 0}]
+        for idx, sec in enumerate(raw_sections):
+            client_sec_id = sec.get("id") or f"sec_{idx + 1}"
+            db_sec_id = f"{q.id.hex[:8]}_{client_sec_id}"
+            section_ids_map[client_sec_id] = db_sec_id
+            db_sec = QuestionnaireSection(
+                id=db_sec_id,
+                questionnaire_id=q.id,
+                title=sec.get("title", f"Section {idx + 1}"),
+                description=sec.get("description"),
+                order=sec.get("order", idx),
+            )
+            self.session.add(db_sec)
+        await self.session.flush()
+
+        # Questions
+        raw_questions = gen_data.get("questions") or []
+        for idx, item in enumerate(raw_questions):
+            client_q_id = item.get("id") or f"q_{idx + 1}"
+            db_q_id = f"{q.id.hex[:8]}_{client_q_id}"
+
+            sec_ref = item.get("sectionId")
+            target_sec = section_ids_map.get(sec_ref) if sec_ref else (list(section_ids_map.values())[0] if section_ids_map else None)
+
+            # Choices in a), b), c), d) format
+            import re
+            raw_choices = item.get("choices") or []
+            formatted_choices = []
+            if raw_choices and isinstance(raw_choices, list):
+                for c_idx, ch in enumerate(raw_choices):
+                    letter = chr(97 + c_idx)
+                    lbl = ch.get("label", "") if isinstance(ch, dict) else str(ch)
+                    if not lbl.lower().startswith(f"{letter})"):
+                        clean_lbl = re.sub(r"^[0-9a-zA-Z][\.\)\-]\s*", "", lbl)
+                        lbl = f"{letter}) {clean_lbl}"
+                    # Determine score based on 6-option benchmark scale: 0, 2, 4, 6, 8, 10
+                    ch_score = ch.get("score") if isinstance(ch, dict) else None
+                    if ch_score is None:
+                        if len(raw_choices) == 6:
+                            benchmark_scores = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
+                            ch_score = benchmark_scores[c_idx] if c_idx < len(benchmark_scores) else float(c_idx * 2)
+                        else:
+                            ch_score = float(c_idx + 1)
+
+                    formatted_choices.append({
+                        "id": ch.get("id") if isinstance(ch, dict) else f"c_{c_idx + 1}",
+                        "code": letter,
+                        "label": lbl,
+                        "score": float(ch_score),
+                    })
+            else:
+                formatted_choices = [
+                    {"id": "c_1", "code": "a", "label": "a) 1. Not available", "score": 0.0},
+                    {"id": "c_2", "code": "b", "label": "b) 2. Initial", "score": 2.0},
+                    {"id": "c_3", "code": "c", "label": "c) 3. Partially implemented", "score": 4.0},
+                    {"id": "c_4", "code": "d", "label": "d) 4. Implemented", "score": 6.0},
+                    {"id": "c_5", "code": "e", "label": "e) 5. Consistently implemented", "score": 8.0},
+                    {"id": "c_6", "code": "f", "label": "f) 6. Mature / exemplary", "score": 10.0},
+                ]
+
+            q_text = item.get("text", f"Question {idx + 1}")
+            explanation = item.get("explanation")
+            remark = item.get("remark")
+
+            db_q = QuestionItemModel(
+                id=db_q_id,
+                questionnaire_id=q.id,
+                section_id=target_sec,
+                variable_name=item.get("variableName", f"Q_{idx + 1}").strip(),
+                type="single_choice",
+                text=q_text,
+                description=None,
+                explanation=explanation,
+                remark=remark,
+                order=item.get("order", idx),
+                validation={"required": True},
+                choices=formatted_choices,
+                conditional_logic=None,
+                is_ai_generated=True,
+                verified_by_researcher=False,
+            )
+            self.session.add(db_q)
+
+        await self.session.commit()
+        created = await self.questionnaire_repo.get_questionnaire_by_id(q.id)
+
+        await self.audit_repo.log_event(
+            event_type="questionnaire:file_upload",
+            action="questionnaire:file_upload",
+            user_id=current_user.id,
+            study_id=q.study_id,
+            entity_type="questionnaire",
+            entity_id=str(q.id),
+            details={"questions_extracted": len(created.questions) if created else 0, "file": filename},
+        )
+        return self.serialize_questionnaire(created)
+
+    async def create_questionnaire_from_pdf(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        current_user: User,
+        study_id: Optional[uuid.UUID] = None,
+        title: Optional[str] = None,
+    ) -> QuestionnaireResponse:
+        return await self.create_questionnaire_from_file(
+            file_bytes=file_bytes,
+            filename=filename,
+            current_user=current_user,
+            study_id=study_id,
+            title=title,
+        )
+
+
+    async def export_responses_excel(
+        self,
+        questionnaire_id: uuid.UUID,
+        responses: Dict[str, Any],
+        remarks: Dict[str, str],
+        participant_id: Optional[str] = None,
+    ) -> bytes:
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        q = await self.questionnaire_repo.get_questionnaire_by_id(questionnaire_id)
+        if not q:
+            raise NotFoundError("Questionnaire", str(questionnaire_id))
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Score Report"
+        ws.views.sheetView[0].showGridLines = True
+
+        # Styles definition
+        font_title = Font(name="Calibri", size=14, bold=True, color="1E3A8A")
+        font_subtitle = Font(name="Calibri", size=10, italic=True, color="475569")
+        font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        font_data = Font(name="Calibri", size=10, color="0F172A")
+        font_total = Font(name="Calibri", size=11, bold=True, color="1E3A8A")
+
+        fill_header = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+        fill_alt_row = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+        fill_total = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
+        fill_benchmark = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+
+        align_center = Alignment(horizontal="center", vertical="top", wrap_text=True)
+        align_left = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        align_right = Alignment(horizontal="right", vertical="top", wrap_text=True)
+
+        thin_side = Side(border_style="thin", color="CBD5E1")
+        double_side = Side(border_style="double", color="1E3A8A")
+        border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+        border_total = Border(top=thin_side, bottom=double_side, left=thin_side, right=thin_side)
+
+        # Title Block
+        ws.merge_cells("A1:E1")
+        ws["A1"] = f"{q.title.upper()} - ASSESSMENT REPORT"
+        ws["A1"].font = font_title
+        ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+
+        subtitle_parts = []
+        if participant_id:
+            subtitle_parts.append(f"Participant: {participant_id}")
+        subtitle_parts.append(f"Version: v{q.version}")
+        subtitle_parts.append(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+
+        ws.merge_cells("A2:E2")
+        ws["A2"] = " | ".join(subtitle_parts)
+        ws["A2"].font = font_subtitle
+        ws["A2"].alignment = Alignment(horizontal="left", vertical="center")
+
+        # Table Column Headers (Row 4) matching Image 1
+        headers = ["No.", "Question", "Response (select one)", "Score", "Remarks"]
+        for col_idx, text in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col_idx, value=text)
+            cell.font = font_header
+            cell.fill = fill_header
+            cell.border = border_cell
+            cell.alignment = align_center if text in ("No.", "Score") else align_left
+
+        current_row = 5
+        total_score = 0.0
+        max_possible_score = 0.0
+        q_counter = 0
+
+        sorted_questions = sorted(q.questions or [], key=lambda x: getattr(x, "order", 0))
+
+        for item in sorted_questions:
+            if item.type == "section_heading":
+                continue
+
+            q_counter += 1
+            user_selected_code = responses.get(str(item.id))
+            user_remark = remarks.get(str(item.id)) or item.remark or ""
+
+            selected_choice_label = "(No response selected)"
+            selected_score = 0.0
+            item_max_score = 0.0
+
+            is_answered = False
+            if item.choices:
+                for c_idx, ch in enumerate(item.choices):
+                    fallback_score = float(c_idx * 2) if len(item.choices) == 6 else float(c_idx + 1)
+                    c_score = ch.get("score") if (isinstance(ch, dict) and ch.get("score") is not None) else fallback_score
+                    if c_score > item_max_score:
+                        item_max_score = c_score
+
+                    c_code = ch.get("code") if isinstance(ch, dict) else str(ch)
+                    if user_selected_code is not None and str(user_selected_code).lower() == str(c_code).lower():
+                        selected_choice_label = ch.get("label", str(ch)) if isinstance(ch, dict) else str(ch)
+                        selected_score = float(c_score)
+                        is_answered = True
+
+            # Show score only if question was selected/answered
+            score_to_display = selected_score if is_answered else ""
+            if is_answered:
+                total_score += selected_score
+            max_possible_score += (item_max_score if item_max_score > 0 else 10.0)
+
+            # Assign row values
+            ws.cell(row=current_row, column=1, value=q_counter).alignment = align_center
+            ws.cell(row=current_row, column=2, value=item.text).alignment = align_left
+            ws.cell(row=current_row, column=3, value=selected_choice_label).alignment = align_left
+            ws.cell(row=current_row, column=4, value=score_to_display).alignment = align_center
+            ws.cell(row=current_row, column=5, value=user_remark).alignment = align_left
+
+            # Apply fonts and borders
+            is_alt = (q_counter % 2 == 0)
+            for c in range(1, 6):
+                cell = ws.cell(row=current_row, column=c)
+                cell.font = font_data
+                cell.border = border_cell
+                if is_alt:
+                    cell.fill = fill_alt_row
+
+            current_row += 1
+
+        start_score_row = 5
+        end_score_row = current_row - 1
+
+        # Summary Row 1: Total Score
+        ws.merge_cells(f"A{current_row}:C{current_row}")
+        total_label = ws.cell(row=current_row, column=1, value="TOTAL SCORE")
+        total_label.font = font_total
+        total_label.alignment = align_right
+
+        score_cell = ws.cell(row=current_row, column=4, value=f"=SUM(D{start_score_row}:D{end_score_row})")
+        score_cell.font = font_total
+        score_cell.alignment = align_center
+
+        rem_summary = ws.cell(row=current_row, column=5, value=f"Earned {total_score:g} out of {max_possible_score:g} maximum possible points")
+        rem_summary.font = font_total
+        rem_summary.alignment = align_left
+
+        for c in range(1, 6):
+            cell = ws.cell(row=current_row, column=c)
+            cell.fill = fill_total
+            cell.border = border_total
+
+        current_row += 1
+
+        # Summary Row 2: Percentage
+        percentage = (total_score / max_possible_score * 100) if max_possible_score > 0 else 0.0
+        ws.merge_cells(f"A{current_row}:C{current_row}")
+        pct_label = ws.cell(row=current_row, column=1, value="PERCENTAGE ACHIEVED")
+        pct_label.font = font_total
+        pct_label.alignment = align_right
+
+        pct_cell = ws.cell(row=current_row, column=4, value=f"{percentage:.1f}%")
+        pct_cell.font = font_total
+        pct_cell.alignment = align_center
+
+        ws.cell(row=current_row, column=5, value="").alignment = align_left
+
+        for c in range(1, 6):
+            cell = ws.cell(row=current_row, column=c)
+            cell.fill = fill_total
+            cell.border = border_cell
+
+        current_row += 1
+
+        # Summary Row 3: Overall Maturity Level Benchmark (based on Image 2)
+        if percentage >= 90.0:
+            benchmark_level = "Mature / exemplary (Score 10)"
+        elif percentage >= 70.0:
+            benchmark_level = "Consistently implemented (Score 8)"
+        elif percentage >= 50.0:
+            benchmark_level = "Implemented (Score 6)"
+        elif percentage >= 30.0:
+            benchmark_level = "Partially implemented (Score 4)"
+        elif percentage >= 10.0:
+            benchmark_level = "Initial (Score 2)"
+        else:
+            benchmark_level = "Not available (Score 0)"
+
+        ws.merge_cells(f"A{current_row}:C{current_row}")
+        bench_label = ws.cell(row=current_row, column=1, value="OVERALL MATURITY LEVEL")
+        bench_label.font = font_total
+        bench_label.alignment = align_right
+
+        bench_val = ws.cell(row=current_row, column=4, value=benchmark_level)
+        bench_val.font = font_total
+        bench_val.alignment = align_center
+
+        ws.cell(row=current_row, column=5, value="Standardized 6-Level Maturity Framework Benchmark").alignment = align_left
+
+        for c in range(1, 6):
+            cell = ws.cell(row=current_row, column=c)
+            cell.fill = fill_benchmark
+            cell.border = border_total
+
+        # Column widths auto-adjustment
+        ws.column_dimensions["A"].width = 8
+        ws.column_dimensions["B"].width = 52
+        ws.column_dimensions["C"].width = 30
+        ws.column_dimensions["D"].width = 16
+        ws.column_dimensions["E"].width = 38
+
+        output = io.BytesIO()
+        wb.save(output)
+        return output.getvalue()
+

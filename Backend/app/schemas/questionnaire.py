@@ -94,6 +94,8 @@ class QuestionItemSchema(BaseSchema):
     type: QuestionType
     text: str = Field(..., min_length=1)
     description: Optional[str] = None
+    explanation: Optional[str] = None
+    remark: Optional[str] = None
     section_id: Optional[str] = Field(None, alias="sectionId")
     order: int = 0
     validation: QuestionValidationRulesSchema = Field(default_factory=QuestionValidationRulesSchema)
@@ -274,3 +276,12 @@ class QuestionnaireMetricsResponse(BaseSchema):
     total_responses: int = Field(0, alias="totalResponses")
     average_completion_rate: float = Field(0.0, alias="averageCompletionRate")
     recent_questionnaires: List[QuestionnaireMetricItem] = Field(default_factory=list, alias="recentQuestionnaires")
+
+
+class QuestionnaireExportExcelRequest(BaseSchema):
+    model_config = ConfigDict(populate_by_name=True)
+
+    responses: Dict[str, Any] = Field(default_factory=dict)
+    remarks: Dict[str, str] = Field(default_factory=dict)
+    participant_id: Optional[str] = Field(None, alias="participantId")
+

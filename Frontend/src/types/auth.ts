@@ -1,4 +1,14 @@
-export type UserRole = 'principal_investigator' | 'co_investigator' | 'researcher' | 'analyst' | 'coordinator' | 'guest';
+export type UserRole = 
+  | 'administrator'
+  | 'principal_investigator' 
+  | 'co_investigator' 
+  | 'researcher' 
+  | 'analyst' 
+  | 'coordinator' 
+  | 'statistician'
+  | 'collector'
+  | 'participant'
+  | 'guest';
 
 export interface UserProfile {
   id: string;
@@ -20,4 +30,3 @@ export interface AuthSession {
   isLoading: boolean;
   error?: string | null;
 }
-

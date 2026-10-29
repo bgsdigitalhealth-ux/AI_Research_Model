@@ -56,6 +56,8 @@ export interface QuestionItem {
   type: QuestionType;
   text: string;
   description?: string;
+  explanation?: string;
+  remark?: string;
   sectionId?: string;
   order: number;
   validation: QuestionValidationRules;

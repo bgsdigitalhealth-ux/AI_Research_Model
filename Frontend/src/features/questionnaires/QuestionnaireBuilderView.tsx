@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
 import {
@@ -6,6 +6,7 @@ import {
   useCreateQuestionnaire,
   useUpdateQuestionnaire,
   useCreateNewVersion,
+  useUploadQuestionsFile,
 } from '@/hooks/useQuestionnaires';
 import { StatusState } from '@/components/shared/StatusState';
 import { QuestionCard } from './components/QuestionCard';
@@ -34,7 +35,11 @@ import {
   ArrowLeft,
   Loader2,
   FolderPlus,
-  AlertCircle
+  AlertCircle,
+  FileUp,
+  Lightbulb,
+  MessageSquare,
+  Sparkles,
 } from 'lucide-react';
 
 export function QuestionnaireBuilderView() {
@@ -55,6 +60,10 @@ export function QuestionnaireBuilderView() {
   const createMutation = useCreateQuestionnaire();
   const updateMutation = useUpdateQuestionnaire(id || '');
   const newVersionMutation = useCreateNewVersion(id || '');
+  const uploadPdfMutation = useUploadQuestionsFile();
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
 
   // Local builder state
   const [title, setTitle] = useState(isNew ? 'Untitled Clinical Instrument' : '');
@@ -83,15 +92,81 @@ export function QuestionnaireBuilderView() {
 
   const isPublished = status === 'published';
 
+  // Handle PDF Upload and AI Extraction into Questionnaire Template
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validExts = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.bmp', '.xlsx', '.xls', '.csv', '.docx'];
+    const fileName = file.name.toLowerCase();
+    const isValid = validExts.some(ext => fileName.endsWith(ext));
+    if (!isValid) {
+      toast({
+        title: 'Unsupported File Format',
+        description: 'Please upload a PDF, Image (PNG/JPG), Excel (XLSX/XLS/CSV), or Word document.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsUploadingPdf(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      if (title && title !== 'Untitled Clinical Instrument') {
+        formData.append('title', title);
+      }
+      if (remoteData?.studyId) {
+        formData.append('studyId', remoteData.studyId);
+      }
+
+      const result = await uploadPdfMutation.mutateAsync(formData);
+
+      toast({
+        title: 'Questions Extracted Successfully',
+        description: `${result.questions?.length || 0} questions parsed into template format (Question, Options, Remark).`,
+        variant: 'success',
+      });
+
+      if (isNew) {
+        navigate(`/questionnaires/${result.id}/builder`, { replace: true });
+      } else {
+        setTitle(result.title);
+        setDescription(result.description || '');
+        setSections(result.sections || []);
+        setQuestions(result.questions || []);
+        if (result.questions && result.questions.length > 0) {
+          setSelectedQuestionId(result.questions[0].id);
+        }
+        setIsDirty(true);
+      }
+    } catch (err: unknown) {
+      toast({
+        title: 'PDF Question Extraction Failed',
+        description:
+          (err as { message?: string })?.message ||
+          'Failed to extract questions from the uploaded PDF. Please verify backend service.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploadingPdf(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   // Add a new question item
-  const handleAddQuestion = (type: QuestionType = 'short_text') => {
+  const handleAddQuestion = (type: QuestionType = 'single_choice') => {
     if (isPublished) return;
     const nextIdx = questions.length + 1;
     const newQ: QuestionItem = {
       id: `q_${Date.now()}_${nextIdx}`,
-      variableName: `VAR_${nextIdx}`,
+      variableName: `Q_${nextIdx}`,
       type,
       text: type === 'section_heading' ? `Section ${sections.length + 1}` : `Question ${nextIdx}`,
+      explanation: '',
+      remark: '',
       order: nextIdx,
       validation: { required: type !== 'section_heading' },
       choices: [
@@ -101,8 +176,10 @@ export function QuestionnaireBuilderView() {
         'likert_5',
       ].includes(type)
         ? [
-            { id: 'opt_1', code: 'OPT_1', label: 'Option 1', score: 1 },
-            { id: 'opt_2', code: 'OPT_2', label: 'Option 2', score: 2 },
+            { id: 'opt_1', code: 'a', label: 'a) Option 1', score: 1 },
+            { id: 'opt_2', code: 'b', label: 'b) Option 2', score: 2 },
+            { id: 'opt_3', code: 'c', label: 'c) Option 3', score: 3 },
+            { id: 'opt_4', code: 'd', label: 'd) Option 4', score: 4 },
           ]
         : undefined,
     };
@@ -119,7 +196,6 @@ export function QuestionnaireBuilderView() {
     const temp = newItems[index - 1];
     newItems[index - 1] = newItems[index];
     newItems[index] = temp;
-    // re-index order
     newItems.forEach((q, i) => (q.order = i + 1));
     setQuestions(newItems);
     setIsDirty(true);
@@ -266,12 +342,44 @@ export function QuestionnaireBuilderView() {
       ]}
       actions={
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Hidden File Input for PDF Questions Upload */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handlePdfUpload}
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.xlsx,.xls,.csv,.docx"
+            className="hidden"
+          />
+
           <Link to="/questionnaires">
             <Button variant="outline" size="sm" className="gap-1.5">
               <ArrowLeft className="h-4 w-4" />
               <span>Back</span>
             </Button>
           </Link>
+
+          {!isPublished && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingPdf}
+              className="gap-1.5 border-blue-300 bg-blue-50/60 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+            >
+              {isUploadingPdf ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <span>Extracting Questions...</span>
+                </>
+              ) : (
+                <>
+                  <FileUp className="h-4 w-4 text-blue-600" />
+                  <span>Upload Questions (PDF, Image, Excel)</span>
+                </>
+              )}
+            </Button>
+          )}
 
           {!isNew && (
             <>
@@ -305,7 +413,7 @@ export function QuestionnaireBuilderView() {
             <Button
               size="sm"
               onClick={handleSaveDraft}
-              disabled={createMutation.isPending || updateMutation.isPending}
+              disabled={createMutation.isPending || updateMutation.isPending || isUploadingPdf}
               className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
             >
               {createMutation.isPending || updateMutation.isPending ? (
@@ -325,6 +433,19 @@ export function QuestionnaireBuilderView() {
       }
     >
       <div className="space-y-6">
+        {/* PDF Extraction Loading Banner */}
+        {isUploadingPdf && (
+          <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center gap-3 animate-in fade-in">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
+            <div className="space-y-0.5">
+              <p className="font-bold">Extracting Questions with AI (PDF, Image, Excel)</p>
+              <p className="text-[11px] text-blue-700">
+                Parsing document into standardized template: <strong>Question</strong> (* Mandatory), <strong>Options</strong> in a, b, c format (* Mandatory), and <strong>Remark</strong> (Optional)...
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Immutable Published Warning Banner */}
         {isPublished && (
           <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-3">
@@ -423,14 +544,31 @@ export function QuestionnaireBuilderView() {
                 </CardContent>
               </Card>
 
-              {/* Sections & Questions Canvas */}
+              {/* Sections & Questions Canvas Header */}
               <div className="flex items-center justify-between pt-1">
-                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Survey Questions ({questions.length} Items)
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Survey Questions ({questions.length} Items)
+                  </h3>
+                  <Badge variant="outline" className="text-[10px] text-slate-500 font-medium">
+                    Question & Options * Mandatory
+                  </Badge>
+                </div>
 
                 {!isPublished && (
                   <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingPdf}
+                      className="text-xs gap-1 border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100"
+                    >
+                      <FileUp className="h-3.5 w-3.5 text-blue-600" />
+                      <span>Upload File</span>
+                    </Button>
+
                     <Button
                       type="button"
                       variant="outline"
@@ -456,14 +594,14 @@ export function QuestionnaireBuilderView() {
                         <option value="" disabled>
                           + Add Question Type...
                         </option>
+                        <option value="single_choice">Single Choice (Radio - a, b, c)</option>
                         <option value="short_text">Short Text</option>
                         <option value="long_text">Long Text</option>
-                        <option value="integer">Integer Number</option>
-                        <option value="decimal">Decimal Number</option>
-                        <option value="single_choice">Single Choice (Radio)</option>
                         <option value="multiple_choice">Multiple Choice (Checkboxes)</option>
                         <option value="rating_5">5-Point Rating</option>
                         <option value="likert_5">5-Point Likert Scale</option>
+                        <option value="integer">Integer Number</option>
+                        <option value="decimal">Decimal Number</option>
                         <option value="date">Date</option>
                         <option value="time">Time</option>
                         <option value="datetime">Date & Time</option>
@@ -476,25 +614,70 @@ export function QuestionnaireBuilderView() {
 
               {/* Genuine Empty State if no questions */}
               {questions.length === 0 ? (
-                <div className="p-12 text-center rounded-xl border border-dashed border-slate-300 bg-white space-y-3">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                    <Plus className="h-6 w-6" />
+                <div className="p-10 text-center rounded-xl border border-dashed border-slate-300 bg-white space-y-4">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                    <FileUp className="h-7 w-7" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-800">No Questions Added Yet</h4>
-                    <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                      Start building this questionnaire by choosing a question type above or using the AI generation workspace.
+                    <h4 className="text-base font-bold text-slate-800">No Questions Added Yet</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                      Upload a PDF containing questions to automatically extract them into the template format, or add items manually using the template editor.
                     </p>
                   </div>
+
+                  {/* Questionnaire Template Structure Overview */}
+                  <div className="p-3.5 max-w-lg mx-auto rounded-xl bg-slate-50 border border-slate-200 text-left text-xs space-y-1.5 text-slate-700">
+                    <p className="font-bold text-slate-900 text-xs">Questionnaire Template Specifications:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
+                      <div className="p-2 rounded bg-white border border-slate-200">
+                        <span className="font-bold text-slate-800 block">1. Question</span>
+                        <span className="text-rose-600 font-semibold">* Mandatory</span>
+                        <p className="text-slate-500 text-[10px] mt-0.5">Problem statement or participant prompt.</p>
+                      </div>
+                      <div className="p-2 rounded bg-white border border-slate-200">
+                        <span className="font-bold text-slate-800 block">2. Options</span>
+                        <span className="text-rose-600 font-semibold">* Mandatory</span>
+                        <p className="text-slate-500 text-[10px] mt-0.5">Single-choice radio buttons.</p>
+                      </div>
+                      <div className="p-2 rounded bg-white border border-slate-200">
+                        <span className="font-bold text-slate-800 block">3. Remark</span>
+                        <span className="text-amber-700 font-medium">Optional</span>
+                        <p className="text-slate-500 text-[10px] mt-0.5">Participant notes, justification, or observations.</p>
+                      </div>
+                    </div>
+                  </div>
+
                   {!isPublished && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleAddQuestion('single_choice')}
-                      className="gap-1.5"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add First Question</span>
-                    </Button>
+                    <div className="flex items-center justify-center gap-3 pt-2">
+                      <Button
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingPdf}
+                        className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                      >
+                        {isUploadingPdf ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Extracting with AI...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileUp className="h-4 w-4" />
+                            <span>Upload Questions (PDF, Image, Excel)</span>
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAddQuestion('single_choice')}
+                        className="gap-1.5"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Add Single Choice Question</span>
+                      </Button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -534,4 +717,3 @@ export function QuestionnaireBuilderView() {
     </PageContainer>
   );
 }
-

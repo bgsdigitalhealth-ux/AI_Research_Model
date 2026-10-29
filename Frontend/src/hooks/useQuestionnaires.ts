@@ -174,3 +174,25 @@ export function useCreateNewVersion(id: string) {
   });
 }
 
+
+export function useUploadQuestionsPdf() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (formData: FormData) => questionnairesApi.uploadQuestionsPdf(formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUESTIONNAIRE_KEYS.all });
+    },
+  });
+}
+
+export function useUploadQuestionsFile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (formData: FormData) => questionnairesApi.uploadQuestionsFile(formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUESTIONNAIRE_KEYS.all });
+    },
+  });
+}

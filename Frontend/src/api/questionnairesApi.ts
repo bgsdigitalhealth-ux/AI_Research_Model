@@ -60,7 +60,9 @@ export const questionnairesApi = {
    * Result is returned as a draft requiring researcher review and verification.
    */
   async generateAiQuestionnaire(payload: AiGenerateQuestionnairePayload): Promise<Questionnaire> {
-    const response = await apiClient.post<Questionnaire>('/questionnaires/generate', payload);
+    const response = await apiClient.post<Questionnaire>('/questionnaires/generate', payload, {
+      timeout: 120000,
+    });
     return response.data;
   },
 
@@ -109,6 +111,49 @@ export const questionnairesApi = {
    */
   async getQuestionnaireMappings(id: string): Promise<ObjectiveOutcomeMapping[]> {
     const response = await apiClient.get<ObjectiveOutcomeMapping[]>(`/questionnaires/${id}/mappings`);
+    return response.data;
+  },
+
+  /**
+   * Uploads questions PDF file and uses backend AI to extract questions into the template.
+   */
+  async uploadQuestionsPdf(formData: FormData): Promise<Questionnaire> {
+    const response = await apiClient.post<Questionnaire>('/questionnaires/upload-pdf', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000,
+    });
+    return response.data;
+  },
+
+  /**
+   * Uploads questions file (PDF, Image, Excel, CSV, Word) and uses AI to extract questions into the template.
+   */
+  async uploadQuestionsFile(formData: FormData): Promise<Questionnaire> {
+    const response = await apiClient.post<Questionnaire>('/questionnaires/upload-file', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000,
+    });
+    return response.data;
+  },
+
+  /**
+   * Exports questionnaire responses, score calculations, and remarks to an Excel (.xlsx) file.
+   */
+  async exportResponsesExcel(
+    id: string,
+    payload: {
+      responses: Record<string, unknown>;
+      remarks: Record<string, string>;
+      participantId?: string;
+    }
+  ): Promise<Blob> {
+    const response = await apiClient.post(`/questionnaires/${id}/export-excel`, payload, {
+      responseType: 'blob',
+    });
     return response.data;
   },
 };

@@ -19,6 +19,8 @@ class QuestionItemModel(Base, TimestampMixin):
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    remark: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Validation rules: { required, min, max, minLength, maxLength, regexPattern, customErrorMessage }

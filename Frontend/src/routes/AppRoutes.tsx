@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/shell/AppShell';
+import { LoginView } from '@/features/auth/LoginView';
 import { DashboardView } from '@/features/dashboard/DashboardView';
 import { StudiesView } from '@/features/studies/StudiesView';
 import { StudyDetailView } from '@/features/studies/StudyDetailView';
@@ -40,6 +41,10 @@ import { NotFoundView } from '@/features/shared/NotFoundView';
 export function AppRoutes() {
   return (
     <Routes>
+      {/* Public Authentication Route */}
+      <Route path="login" element={<LoginView />} />
+
+      {/* Main Workspace with AppShell */}
       <Route element={<AppShell />}>
         {/* Core Dashboard */}
         <Route index element={<DashboardView />} />
