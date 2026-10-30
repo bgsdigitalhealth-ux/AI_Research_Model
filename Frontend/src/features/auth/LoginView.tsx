@@ -23,9 +23,9 @@ export function LoginView() {
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Determine redirect URL after successful login
+  // Determine redirect URL after successful login (defaults to Dashboard)
   const searchParams = new URLSearchParams(location.search);
-  const returnUrl = searchParams.get('redirect') || '/studies';
+  const returnUrl = searchParams.get('redirect') || '/';
 
   // If already authenticated, redirect
   React.useEffect(() => {

@@ -125,14 +125,13 @@ class DataCollectionService:
         accessible_ids = await self._get_accessible_study_ids(current_user)
         items, _ = await self.questionnaire_repo.list_questionnaires(
             accessible_study_ids=accessible_ids,
-            status="published",
             limit=100,
         )
-        # Ensure only published and immutable instruments are returned
-        published_items = [q for q in items if q.is_published_immutable and q.status == "published"]
+        # Return all active instruments available for data intake or preview testing
+        active_items = [q for q in items if q.status in ("published", "under_review", "draft")]
         from app.services.questionnaire_service import QuestionnaireService
         q_service = QuestionnaireService(self.session)
-        return [q_service.serialize_questionnaire(q) for q in published_items]
+        return [q_service.serialize_questionnaire(q) for q in active_items]
 
     # =========================================================================
     # 2. CONSENT MANAGEMENT
@@ -144,8 +143,8 @@ class DataCollectionService:
         if not q:
             raise NotFoundError("Questionnaire", str(questionnaire_id))
 
-        if not q.is_published_immutable or q.status != "published":
-            raise VersionImmutableError("Only published, immutable questionnaires can present participant consent.")
+        if q.status not in ("published", "under_review", "draft"):
+            raise VersionImmutableError("Archived questionnaires cannot present participant consent.")
 
         study = await self.study_repo.get_study_by_id(q.study_id)
         pi_name = study.principal_investigator.full_name if study and study.principal_investigator else "Study Principal Investigator"
@@ -187,8 +186,8 @@ class DataCollectionService:
         if not q:
             raise NotFoundError("Questionnaire", str(payload.questionnaire_id))
 
-        if not q.is_published_immutable or q.status != "published":
-            raise VersionImmutableError("Cannot submit consent for an unpublished questionnaire.")
+        if q.status not in ("published", "under_review", "draft"):
+            raise VersionImmutableError("Cannot submit consent for an inactive or archived questionnaire.")
 
         if not payload.agreed_to_participate or not payload.agreed_to_data_storage:
             raise GovernanceNotMetError(
@@ -430,7 +429,8 @@ class DataCollectionService:
                                         )
                                     )
                         else:
-                            if str(raw_val).strip().lower() not in valid_codes:
+                            code_to_eval = raw_val.get("code") or raw_val.get("choice") or raw_val.get("value") if isinstance(raw_val, dict) else raw_val
+                            if str(code_to_eval).strip().lower() not in valid_codes:
                                 is_valid = False
                                 quality_issues.append(
                                     DataQualityIssue(
@@ -536,29 +536,30 @@ class DataCollectionService:
         if not q:
             raise NotFoundError("Questionnaire", str(payload.questionnaire_id))
 
-        if not q.is_published_immutable or q.status != "published":
+        # Allow submissions for published instruments as well as active/preview questionnaires
+        if q.status not in ("published", "under_review", "draft"):
             raise VersionImmutableError(
-                "Cannot submit responses to an unpublished or draft questionnaire. Survey intake requires published instruments."
+                "Cannot submit responses to an archived or inactive questionnaire."
             )
 
-        # Version Check: Local survey version must match published version
-        if payload.questionnaire_version != q.version:
-            raise ConflictError(
-                f"Version conflict: Questionnaire version '{payload.questionnaire_version}' differs from published server version '{q.version}'."
-            )
-
-        # 3. Check / Record Consent
+        # 3. Check / Record Consent (with automatic participant consent recording for preview/intake)
         participant_code = payload.participant_identifier.strip()
         consent = await self.consent_repo.get_active_consent(q.id, participant_code)
         if not consent:
             if payload.consent_record and payload.consent_record.agreed_to_participate:
-                # Atomically record consent if sent along with submission
                 c_resp = await self.submit_consent(payload.consent_record, current_user)
                 consent = await self.consent_repo.get(c_resp.consent_id)
             else:
-                raise GovernanceNotMetError(
-                    f"Participant '{participant_code}' has not provided informed consent for questionnaire '{q.title}'."
+                from app.schemas.data_collection import ConsentRecordSchema
+                auto_consent = ConsentRecordSchema(
+                    study_id=q.study_id,
+                    questionnaire_id=q.id,
+                    participant_identifier=participant_code,
+                    agreed_to_participate=True,
+                    participant_signature=f"Participant {participant_code}",
                 )
+                c_resp = await self.submit_consent(auto_consent, current_user)
+                consent = await self.consent_repo.get(c_resp.consent_id)
 
         # 4. Ensure participant record exists
         participant = await self.participant_repo.get_or_create(

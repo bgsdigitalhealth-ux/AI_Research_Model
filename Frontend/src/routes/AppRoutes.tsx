@@ -48,7 +48,7 @@ export function AppRoutes() {
       <Route element={<AppShell />}>
         {/* Core Dashboard */}
         <Route index element={<DashboardView />} />
-        <Route path="dashboard" element={<Navigate to="/" replace />} />
+        <Route path="dashboard" element={<DashboardView />} />
 
         {/* My Studies */}
         <Route path="studies" element={<StudiesView />} />

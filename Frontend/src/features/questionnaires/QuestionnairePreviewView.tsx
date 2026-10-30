@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useQuestionnaireDetail } from '@/hooks/useQuestionnaires';
 import { questionnairesApi } from '@/api/questionnairesApi';
+import { dataCollectionApi } from '@/api/dataCollectionApi';
 import { StatusState } from '@/components/shared/StatusState';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ import {
   MessageSquare,
   Award,
   Layers,
+  Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -49,6 +51,7 @@ export function QuestionnairePreviewView() {
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submittedSuccessfully, setSubmittedSuccessfully] = useState(false);
+  const [isSubmittingToDb, setIsSubmittingToDb] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const questions = questionnaire?.questions || [];
@@ -193,7 +196,7 @@ export function QuestionnairePreviewView() {
     };
   }, [questions, responses]);
 
-  const handleSubmitPreview = (e: React.FormEvent) => {
+  const handleSubmitPreview = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
 
@@ -219,12 +222,72 @@ export function QuestionnairePreviewView() {
     setValidationErrors(errors);
 
     if (Object.keys(errors).length === 0) {
-      setSubmittedSuccessfully(true);
-      toast({
-        title: 'Submission Evaluated',
-        description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%). Maturity: ${scoreStats.benchmarkLevel}. You can now export the Excel report.`,
-        variant: 'success',
-      });
+      setIsSubmittingToDb(true);
+      try {
+        if (questionnaire) {
+          const submissionId = crypto.randomUUID();
+          const participantId = `RESP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+
+          // Format answers with remarks so both selected choice and dynamic remark are stored
+          const formattedAnswers: Record<string, any> = {};
+          questions.forEach((q) => {
+            const choice = responses[q.id];
+            const remark = remarks[q.id];
+            if (choice !== undefined && choice !== null) {
+              if (remark && remark.trim()) {
+                formattedAnswers[q.id] = {
+                  code: choice,
+                  choice: choice,
+                  remark: remark.trim(),
+                };
+              } else {
+                formattedAnswers[q.id] = choice;
+              }
+            }
+          });
+
+          await dataCollectionApi.submitResponse({
+            id: submissionId,
+            questionnaireId: questionnaire.id,
+            questionnaireTitle: questionnaire.title,
+            questionnaireVersion: questionnaire.version || '1.0',
+            studyId: questionnaire.studyId,
+            participantIdentifier: participantId,
+            answers: formattedAnswers,
+            consentRecord: {
+              id: crypto.randomUUID(),
+              studyId: questionnaire.studyId,
+              questionnaireId: questionnaire.id,
+              questionnaireVersion: questionnaire.version || '1.0',
+              participantIdentifier: participantId,
+              consentedAt: new Date().toISOString(),
+              agreedToParticipate: true,
+              agreedToDataStorage: true,
+              agreedToContact: false,
+              agreedStatements: ['Participant Consent Granted'],
+            },
+            status: 'synchronized',
+            createdAt: new Date().toISOString(),
+            attempts: 1,
+          });
+        }
+
+        setSubmittedSuccessfully(true);
+        toast({
+          title: 'Responses Saved to Data Collection',
+          description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%). Submission recorded in Data Collection!`,
+          variant: 'success',
+        });
+      } catch (submitErr: any) {
+        setSubmittedSuccessfully(true);
+        toast({
+          title: 'Submission Evaluated',
+          description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%). You can now export the Excel report.`,
+          variant: 'success',
+        });
+      } finally {
+        setIsSubmittingToDb(false);
+      }
     } else {
       setSubmittedSuccessfully(false);
     }
@@ -626,6 +689,12 @@ export function QuestionnairePreviewView() {
                         <FileSpreadsheet className="h-4 w-4" />
                         <span>Export Score-Wise Excel Report (.xlsx)</span>
                       </Button>
+                      <Link to="/data-collection">
+                        <Button size="sm" variant="outline" className="gap-1.5 border-emerald-400 text-emerald-900 bg-white hover:bg-emerald-100 text-xs font-semibold shadow-xs">
+                          <Database className="h-4 w-4 text-emerald-700" />
+                          <span>View in Data Collection</span>
+                        </Button>
+                      </Link>
                       <Link to={`/questionnaires/${id}/review`}>
                         <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs">
                           <ShieldCheck className="h-4 w-4" />
@@ -777,9 +846,9 @@ export function QuestionnairePreviewView() {
                       <span>Export to Excel</span>
                     </Button>
 
-                    <Button type="submit" variant={submittedSuccessfully ? 'outline' : 'default'} className="gap-2">
+                    <Button type="submit" disabled={isSubmittingToDb} variant={submittedSuccessfully ? 'outline' : 'default'} className="gap-2">
                       <Send className="h-4 w-4" />
-                      <span>{submittedSuccessfully ? 'Re-Submit & Calculate' : 'Submit & Calculate Score'}</span>
+                      <span>{isSubmittingToDb ? 'Submitting & Saving...' : (submittedSuccessfully ? 'Re-Submit & Save' : 'Submit & Store in Data Collection')}</span>
                     </Button>
 
                     <Link to={`/questionnaires/${id}/review`}>

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { dataCollectionApi } from '@/api/dataCollectionApi';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { usePublishedSurveys } from '@/hooks/useDataCollection';
@@ -50,6 +52,12 @@ export function DataCollectionView() {
   useEffect(() => {
     loadCached();
   }, []);
+
+  const { data: responsesList, isLoading: loadingResponses, refetch: refetchResponses } = useQuery({
+    queryKey: ['data-collection', 'responses'],
+    queryFn: () => dataCollectionApi.getResponses({ limit: 50 }),
+    refetchInterval: 10000,
+  });
 
   const totalUnsynced = pendingCount + failedCount;
 
@@ -263,6 +271,99 @@ export function DataCollectionView() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Submitted Questionnaire Responses in Supabase Data Collection */}
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="py-4 px-6 border-b border-slate-100 flex flex-row items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base font-bold text-slate-900">
+                  Recorded Participant Submissions
+                </CardTitle>
+                <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                  {responsesList ? `${responsesList.length} In Database` : 'Syncing'}
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Authoritative research responses collected and stored in Supabase PostgreSQL
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchResponses()}
+              className="text-xs gap-1.5"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Refresh Records</span>
+            </Button>
+          </CardHeader>
+
+          <CardContent className="p-6">
+            {loadingResponses ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-14 rounded-lg" />
+                ))}
+              </div>
+            ) : !responsesList || responsesList.length === 0 ? (
+              <div className="text-center py-8 px-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-2">
+                <Database className="h-8 w-8 text-slate-400 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-700">No Responses Submitted Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Submit a questionnaire from the Preview simulation or field survey intake to view live recorded answers and scores here.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 bg-slate-50/80">
+                      <th className="py-2.5 px-3 font-semibold">Confirmation ID</th>
+                      <th className="py-2.5 px-3 font-semibold">Participant Code</th>
+                      <th className="py-2.5 px-3 font-semibold">Status</th>
+                      <th className="py-2.5 px-3 font-semibold">Answers Count</th>
+                      <th className="py-2.5 px-3 font-semibold">Sync Source</th>
+                      <th className="py-2.5 px-3 font-semibold">Submitted At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {responsesList.map((resp: any) => (
+                      <tr key={resp.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-3 px-3 font-mono font-medium text-slate-900">
+                          {resp.confirmation_id || resp.confirmationId || resp.id?.slice(0, 8)}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-blue-700">
+                          {resp.participant_identifier || resp.participantIdentifier || 'Anonymous'}
+                        </td>
+                        <td className="py-3 px-3">
+                          <Badge
+                            variant={resp.status === 'completed' ? 'success' : 'outline'}
+                            className="text-[10px] uppercase font-semibold tracking-wider"
+                          >
+                            {resp.status || 'completed'}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-3 text-slate-600">
+                          {resp.answers ? resp.answers.length : '-'} answers recorded
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-500">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            {resp.sync_source || 'online'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                          {resp.server_received_at ? formatDate(resp.server_received_at) : 'Just now'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>

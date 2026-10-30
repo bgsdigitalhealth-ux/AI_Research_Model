@@ -97,6 +97,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <NavLink
                     key={item.id}
                     to={item.path}
+                    end={item.path === '/'}
                     onClick={() => {
                       if (window.innerWidth < 1024) onClose();
                     }}

@@ -92,5 +92,19 @@ export const dataCollectionApi = {
     const response = await apiClient.get<CollectionMonitoringMetrics>('/data-collection/monitoring');
     return response.data;
   },
+
+  /**
+   * Retrieves submitted survey responses from backend data collection.
+   */
+  async getResponses(params?: {
+    studyId?: string;
+    questionnaireId?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> {
+    const response = await apiClient.get<any[]>('/data-collection/responses', { params });
+    return response.data;
+  },
 };
 

@@ -1049,8 +1049,15 @@ class QuestionnaireService:
             client_q_id = item.get("id") or f"q_{idx + 1}"
             db_q_id = f"{q.id.hex[:8]}_{client_q_id}"
 
-            sec_ref = item.get("sectionId")
-            target_sec = section_ids_map.get(sec_ref) if sec_ref else (list(section_ids_map.values())[0] if section_ids_map else None)
+            sec_ref = item.get("sectionId") or item.get("section_id")
+            target_sec = section_ids_map.get(sec_ref) if sec_ref else None
+            if not target_sec and sec_ref:
+                for sec_item in raw_sections:
+                    if str(sec_item.get("title", "")).strip().lower() == str(sec_ref).strip().lower():
+                        target_sec = section_ids_map.get(sec_item.get("id"))
+                        break
+            if not target_sec and section_ids_map:
+                target_sec = list(section_ids_map.values())[0]
 
             # Choices in a), b), c), d) format
             import re
