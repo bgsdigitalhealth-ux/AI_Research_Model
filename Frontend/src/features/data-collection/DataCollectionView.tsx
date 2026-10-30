@@ -279,10 +279,33 @@ export function DataCollectionView() {
         rows.push([idx + 1, questionText, chosenLabel, scoreVal, remark]);
       });
 
-      if (sub.earnedScore !== undefined && sub.maxScore !== undefined) {
-        rows.push(['']);
-        rows.push(['', 'TOTAL SCORE', '', `${sub.earnedScore} / ${sub.maxScore}`, `(${sub.percentage?.toFixed(1)}%)`]);
-        rows.push(['', 'BENCHMARK MATURITY LEVEL', '', sub.benchmarkLevel || '', '']);
+      let totalSelectedScore = 0;
+      sub.answers.forEach((ans) => {
+        const raw = ans.raw_value !== undefined ? ans.raw_value : ans.rawValue;
+        let cLabel = '';
+        if (typeof raw === 'object' && raw !== null) {
+          cLabel = raw.choice || raw.code || '';
+        } else if (raw !== undefined && raw !== null) {
+          cLabel = String(raw);
+        }
+        const qD = matchedQ?.questions?.find(
+          (q) => q.id === (ans.question_id || ans.questionId) || q.variableName === (ans.variable_name || ans.variableName)
+        );
+        const mC = qD?.choices?.find(
+          (c) =>
+            String(c.code).toLowerCase() === String(cLabel).toLowerCase() ||
+            String(c.label).toLowerCase() === String(cLabel).toLowerCase()
+        );
+        if (mC && typeof mC.score === 'number') {
+          totalSelectedScore += mC.score;
+        }
+      });
+
+      const finalTotal = sub.earnedScore !== undefined ? sub.earnedScore : totalSelectedScore;
+      rows.push(['']);
+      rows.push(['', 'TOTAL SCORE', '', finalTotal, '']);
+      if (sub.benchmarkLevel) {
+        rows.push(['', 'BENCHMARK MATURITY LEVEL', '', sub.benchmarkLevel, '']);
       }
 
       const worksheet = XLSX.utils.aoa_to_sheet(rows);

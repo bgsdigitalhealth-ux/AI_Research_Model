@@ -34,6 +34,7 @@ import {
   GitBranch,
   Layers,
   ArrowLeft,
+  ArrowRight,
   Trash2,
   Loader2,
   FolderPlus,
@@ -765,6 +766,30 @@ export function QuestionnaireBuilderView() {
                       onDelete={() => handleDelete(question.id)}
                     />
                   ))}
+
+                  {/* Bottom Review Action Bar */}
+                  <div className="pt-4 pb-10 flex items-center justify-between border-t border-slate-200 gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddSection}
+                      className="text-xs gap-1.5"
+                    >
+                      <FolderPlus className="h-4 w-4 text-slate-500" />
+                      <span>Add Section</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      onClick={() => navigate(`/questionnaires/${id}/preview`)}
+                      className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold px-6 py-2.5 text-xs"
+                    >
+                      <Eye className="h-4 w-4" />
+                      <span>Review Questionnaire</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

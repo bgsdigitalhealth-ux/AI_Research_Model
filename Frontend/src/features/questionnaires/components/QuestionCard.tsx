@@ -100,47 +100,15 @@ export function QuestionCard({
           )}
 
           <div className="space-y-1.5 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded">
-                #{index + 1} {question.variableName}
-              </span>
-
-              {question.type !== 'single_choice' && (
-                <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', typeMeta.color)}>
-                  {typeMeta.label}
-                </span>
-              )}
-
-              {/* Mandatory Template Field Badge */}
-              {!isHeading && (
-                <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/60">
-                  * Mandatory: Question & Options
-                </span>
-              )}
-
-
-
-              {question.remark && (
-                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60 flex items-center gap-1">
-                  <MessageSquare className="h-2.5 w-2.5 text-amber-600" />
-                  <span>Remark</span>
-                </span>
-              )}
-
-              {question.conditionalLogic?.rules.length ? (
+            {/* Only show conditional indicator if rules exist */}
+            {Boolean(question.conditionalLogic?.rules.length) && (
+              <div className="flex items-center gap-2 pb-1">
                 <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <GitBranch className="h-3 w-3" />
                   <span>Conditional</span>
                 </span>
-              ) : null}
-
-              {question.isAiGenerated && (
-                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  <span>AI Template</span>
-                </span>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Template Field 1: Question or Section Header */}
             {isHeading ? (
@@ -214,12 +182,7 @@ export function QuestionCard({
       {/* Template Field 2: Options (Mandatory) with Radio Buttons in a, b, c format */}
       {question.choices && question.choices.length > 0 && !isHeading && (
         <div className="pt-2 border-t border-slate-100 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wide flex items-center gap-1">
-              Response Options <span className="text-rose-500 font-bold">*</span>
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium">Mandatory</span>
-          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {question.choices.map((opt, i) => {
               const letter = String.fromCharCode(97 + i); // a, b, c, d

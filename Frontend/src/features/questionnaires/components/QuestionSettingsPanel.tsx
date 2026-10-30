@@ -232,14 +232,9 @@ export function QuestionSettingsPanel({
 
         {/* Template Field 1: Question Prompt Text or Section Title (Mandatory) */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-slate-700">
-              {question.type === 'section_heading' ? 'Section Title' : 'Question Prompt Text'} <span className="text-rose-500 font-bold">*</span>
-            </label>
-            <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-semibold">
-              Mandatory
-            </span>
-          </div>
+          <label className="text-[11px] font-semibold text-slate-700 block">
+            {question.type === 'section_heading' ? 'Section Title' : 'Question Prompt Text'} <span className="text-rose-500 font-bold">*</span>
+          </label>
           <textarea
             rows={2}
             value={question.text}
@@ -274,15 +269,10 @@ export function QuestionSettingsPanel({
 
         {/* Template Field 4: Remark (Optional) */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
-              <MessageSquare className="h-3.5 w-3.5 text-amber-600" />
-              <span>Remark</span>
-            </label>
-            <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium border border-amber-200/50">
-              Optional
-            </span>
-          </div>
+          <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5 text-amber-600" />
+            <span>Remark</span>
+          </label>
           <textarea
             rows={2}
             value={question.remark || ''}
@@ -320,11 +310,10 @@ export function QuestionSettingsPanel({
         {/* Validation Rules Card */}
         {question.type !== 'section_heading' && (
         <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
-          <div className="flex items-center justify-between">
+          <div>
             <span className="font-bold text-slate-800 text-xs">
               Response Validation & Constraints
             </span>
-            <span className="text-[10px] text-slate-500 font-medium">Question & Options Mandatory</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -414,24 +403,9 @@ export function QuestionSettingsPanel({
           <div className="space-y-2.5 pt-1">
             <div className="space-y-2 pb-2 border-b border-slate-100">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-slate-800 text-xs">
-                    Response Options ({question.choices?.length || 0}) <span className="text-rose-500 font-bold">*</span>
-                  </span>
-                  <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-semibold border border-rose-200/50">
-                    Mandatory
-                  </span>
-                </div>
-                {!isPublished && (
-                  <button
-                    type="button"
-                    onClick={handleFormatChoicesABC}
-                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline"
-                    title="Format options with a, b, c labels"
-                  >
-                    Format a, b, c
-                  </button>
-                )}
+                <span className="font-bold text-slate-800 text-xs">
+                  Response Options ({question.choices?.length || 0}) <span className="text-rose-500 font-bold">*</span>
+                </span>
               </div>
 
               {!isPublished && (
