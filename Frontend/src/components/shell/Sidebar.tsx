@@ -12,7 +12,7 @@ import {
   Settings,
   HelpCircle,
   FlaskConical,
-  X
+  X,
 } from 'lucide-react';
 import { NavItem } from '@/types/navigation';
 import { cn } from '@/lib/utils';
@@ -51,15 +51,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         />
       )}
 
-      {/* Main Dark Navy Sidebar Container */}
+      {/* Main Dark Navy Sidebar Container - Fixed Height & Independently Scrollable */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#0b132b] text-slate-300 border-r border-[#1c2541] transition-transform duration-200 ease-in-out lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#0b132b] text-slate-300 border-r border-[#1c2541] transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 h-full max-h-screen shrink-0',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between px-5 border-b border-[#1c2541]">
+        {/* Brand Header - Pinned at top */}
+        <div className="flex h-16 shrink-0 items-center justify-between px-5 border-b border-[#1c2541]">
           <NavLink to="/" className="flex items-center gap-2.5 group">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-md shadow-blue-500/20 group-hover:bg-blue-500 transition-colors">
               <FlaskConical className="h-5 w-5" />
@@ -83,8 +83,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation Sections */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+        {/* Navigation Sections - Separately Scrollable */}
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6 sidebar-scrollbar">
           {/* Main Navigation */}
           <div>
             <div className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -124,8 +124,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
         </div>
 
-        {/* Bottom Utility Navigation */}
-        <div className="p-3 border-t border-[#1c2541] space-y-1">
+        {/* Bottom Utility Navigation - Pinned at bottom */}
+        <div className="shrink-0 p-3 border-t border-[#1c2541] space-y-1">
           <div className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             System
           </div>
@@ -157,4 +157,3 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     </>
   );
 }
-

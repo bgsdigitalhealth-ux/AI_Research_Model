@@ -21,20 +21,20 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Dark Navy Sidebar */}
+    <div className="h-screen w-screen overflow-hidden bg-slate-50 flex">
+      {/* Dark Navy Sidebar - Fixed & Independently Scrollable */}
       <Sidebar
         isOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
       />
 
-      {/* Workspace Area */}
-      <div className="flex flex-1 flex-col min-w-0 overflow-x-hidden">
-        {/* Top Header */}
+      {/* Workspace Area - Independently Scrollable */}
+      <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden">
+        {/* Top Header - Fixed at top of workspace */}
         <TopNavbar onOpenMobileMenu={() => setMobileMenuOpen(true)} />
 
-        {/* Dynamic Route View Content */}
-        <main className="flex-1 overflow-y-auto">
+        {/* Dynamic Route View Content - Scrolls on its own */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
           <Outlet />
         </main>
       </div>
