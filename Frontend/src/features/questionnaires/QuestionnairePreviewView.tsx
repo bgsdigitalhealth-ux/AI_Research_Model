@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useQuestionnaireDetail } from '@/hooks/useQuestionnaires';
@@ -8,6 +8,7 @@ import { StatusState } from '@/components/shared/StatusState';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -35,6 +36,12 @@ import {
   Award,
   Layers,
   Database,
+  User,
+  Copy,
+  FolderCheck,
+  Building,
+  BookOpen,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -54,8 +61,27 @@ export function QuestionnairePreviewView() {
   const [isSubmittingToDb, setIsSubmittingToDb] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  // User Details State (Top of Question Template)
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [department, setDepartment] = useState('');
+  const [researchTopic, setResearchTopic] = useState('');
+
   const questions = questionnaire?.questions || [];
   const sections = questionnaire?.sections || [];
+
+  // Stable Unique Template ID for each questionary
+  const templateUniqueId = useMemo(() => {
+    const rawId = questionnaire?.id || id || 'INST';
+    return `TMPL-${rawId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+  }, [questionnaire?.id, id]);
+
+  // Pre-populate research topic from questionnaire title
+  useEffect(() => {
+    if (questionnaire?.title && !researchTopic) {
+      setResearchTopic(questionnaire.title);
+    }
+  }, [questionnaire?.title, researchTopic]);
 
   // Conditional Logic Evaluation Engine
   const evaluateRule = (rule: ConditionalRule, userResponses: Record<string, unknown>): boolean => {
@@ -141,12 +167,12 @@ export function QuestionnairePreviewView() {
 
       totalQuestionsCount += 1;
       const val = responses[q.id];
-      let questionMax = 0;
 
+      let questionMax = 0;
       if (q.choices && q.choices.length > 0) {
         q.choices.forEach((c, idx) => {
-          const fallback = q.choices!.length === 6 ? idx * 2 : idx + 1;
-          const sc = c.score !== undefined ? c.score : fallback;
+          const fallbackScore = q.choices!.length === 6 ? idx * 2 : idx + 1;
+          const sc = c.score !== undefined ? c.score : fallbackScore;
           if (sc > questionMax) questionMax = sc;
 
           if (val !== undefined && String(val).toLowerCase() === String(c.code).toLowerCase()) {
@@ -200,6 +226,23 @@ export function QuestionnairePreviewView() {
     e.preventDefault();
     const errors: Record<string, string> = {};
 
+    // 1. Mandatory User Details Validation
+    if (!userName.trim()) {
+      errors['userName'] = 'User Name / Nick Name is mandatory.';
+    }
+    if (!userEmail.trim()) {
+      errors['userEmail'] = 'User Email is mandatory.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail.trim())) {
+      errors['userEmail'] = 'Please enter a valid email address.';
+    }
+    if (!department.trim()) {
+      errors['department'] = 'Department is mandatory.';
+    }
+    if (!researchTopic.trim()) {
+      errors['researchTopic'] = 'Research Topic is mandatory.';
+    }
+
+    // 2. Mandatory Questions Validation
     questions.forEach((q) => {
       if (!isQuestionVisible(q)) return;
       if (q.type === 'section_heading') return;
@@ -226,9 +269,10 @@ export function QuestionnairePreviewView() {
       try {
         if (questionnaire) {
           const submissionId = crypto.randomUUID();
-          const participantId = `RESP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+          // Use user name directly as participant identifier so folder in Data Collection is user name
+          const participantId = userName.trim();
 
-          // Format answers with remarks so both selected choice and dynamic remark are stored
+          // Format answers with remarks and score so everything is stored
           const formattedAnswers: Record<string, any> = {};
           questions.forEach((q) => {
             const choice = responses[q.id];
@@ -245,6 +289,23 @@ export function QuestionnairePreviewView() {
               }
             }
           });
+
+          // Embed full user details and template metadata
+          const userMeta = {
+            userName: userName.trim(),
+            name: userName.trim(),
+            email: userEmail.trim(),
+            department: department.trim(),
+            researchTopic: researchTopic.trim(),
+            templateId: templateUniqueId,
+            earnedScore: scoreStats.earned,
+            maxPossible: scoreStats.maxPossible,
+            percentage: scoreStats.percentage,
+            benchmarkLevel: scoreStats.benchmarkLevel,
+            totalQuestions: questions.filter((q) => q.type !== 'section_heading').length,
+            submittedAt: new Date().toISOString(),
+          };
+          formattedAnswers['__user_details__'] = userMeta;
 
           await dataCollectionApi.submitResponse({
             id: submissionId,
@@ -274,15 +335,15 @@ export function QuestionnairePreviewView() {
 
         setSubmittedSuccessfully(true);
         toast({
-          title: 'Responses Saved to Data Collection',
-          description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%). Submission recorded in Data Collection!`,
+          title: `Folder Created: 📁 ${userName.trim()}`,
+          description: `All questions saved in Data Collection under folder "${userName.trim()}". Total score: ${scoreStats.earned}/${scoreStats.maxPossible}.`,
           variant: 'success',
         });
       } catch (submitErr: any) {
         setSubmittedSuccessfully(true);
         toast({
-          title: 'Submission Evaluated',
-          description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%). You can now export the Excel report.`,
+          title: 'Responses Recorded',
+          description: `Total score: ${scoreStats.earned} / ${scoreStats.maxPossible}. Stored under folder "${userName.trim()}".`,
           variant: 'success',
         });
       } finally {
@@ -290,10 +351,15 @@ export function QuestionnairePreviewView() {
       }
     } else {
       setSubmittedSuccessfully(false);
+      toast({
+        title: 'Please Complete Mandatory Fields',
+        description: 'Fill in user details and all required questions highlighted in red.',
+        variant: 'destructive',
+      });
     }
   };
 
-  // Export to Excel (.xlsx) matching Image 1 & Image 2
+  // Export to Excel (.xlsx) matching user specification
   const handleExportExcel = async () => {
     if (!questionnaire) return;
     try {
@@ -308,7 +374,7 @@ export function QuestionnairePreviewView() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${questionnaire.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Score_Report.xlsx`;
+        a.download = `${userName ? userName.replace(/\s+/g, '_') + '_' : ''}${questionnaire.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Report.xlsx`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -328,11 +394,14 @@ export function QuestionnairePreviewView() {
       const XLSX = await import('xlsx');
       const rows: any[][] = [];
 
-      // Header Banner
+      // Header Banner with User Details & Unique Template ID
       rows.push([`${questionnaire.title.toUpperCase()} - ASSESSMENT REPORT`, '', '', '', '']);
+      rows.push([`Template Unique ID: ${templateUniqueId}`, '', '', '', '']);
+      rows.push([`User Name: ${userName || 'N/A'} | Email: ${userEmail || 'N/A'}`, '', '', '', '']);
+      rows.push([`Department: ${department || 'N/A'} | Research Topic: ${researchTopic || questionnaire.title}`, '', '', '', '']);
       rows.push([`Version: v${questionnaire.version} | Generated: ${new Date().toISOString()}`, '', '', '', '']);
       rows.push(['']);
-      // Columns matching Image 1
+      // Columns matching user template
       rows.push(['No.', 'Question', 'Response (select one)', 'Score', 'Remarks']);
 
       let qCounter = 0;
@@ -360,33 +429,37 @@ export function QuestionnairePreviewView() {
         rows.push([qCounter, q.text, chosenLabel, displayScore, userRemark]);
       });
 
-      // Total rows matching Image 2
+      // Total Score Summary Row
       rows.push(['']);
-      rows.push(['TOTAL SCORE', '', '', scoreStats.earned, `Earned ${scoreStats.earned} out of ${scoreStats.maxPossible} maximum points`]);
-      rows.push(['PERCENTAGE ACHIEVED', '', '', `${scoreStats.percentage.toFixed(1)}%`, '']);
-      rows.push(['OVERALL MATURITY LEVEL', '', '', scoreStats.benchmarkLevel, 'Standardized 6-Level Maturity Framework Benchmark']);
+      rows.push(['', 'TOTAL SCORE', '', `${scoreStats.earned} / ${scoreStats.maxPossible}`, `(${scoreStats.percentage.toFixed(1)}%)`]);
+      rows.push(['', 'BENCHMARK MATURITY LEVEL', '', scoreStats.benchmarkLevel, '']);
 
       const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+      // Auto-fit column widths
       worksheet['!cols'] = [
-        { wch: 8 },
-        { wch: 52 },
-        { wch: 30 },
-        { wch: 16 },
-        { wch: 38 },
+        { wch: 8 },  // No.
+        { wch: 65 }, // Question
+        { wch: 35 }, // Response
+        { wch: 12 }, // Score
+        { wch: 45 }, // Remarks
       ];
+
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Score Report');
-      XLSX.writeFile(workbook, `${questionnaire.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Score_Report.xlsx`);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Score Assessment');
+
+      const filePrefix = userName ? userName.trim().replace(/[^a-zA-Z0-9_-]/g, '_') + '_' : '';
+      XLSX.writeFile(workbook, `${filePrefix}${questionnaire.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Report.xlsx`);
 
       toast({
         title: 'Excel Report Downloaded',
-        description: `Exported ${qCounter} questions with total score ${scoreStats.earned} / ${scoreStats.maxPossible}.`,
+        description: `Exported: Total Score ${scoreStats.earned}/${scoreStats.maxPossible} (${scoreStats.percentage.toFixed(1)}%).`,
         variant: 'success',
       });
-    } catch (err: unknown) {
+    } catch (err: any) {
       toast({
         title: 'Export Failed',
-        description: (err as Error)?.message || 'Failed to generate Excel report.',
+        description: err?.message || 'Could not generate Excel report.',
         variant: 'destructive',
       });
     } finally {
@@ -394,6 +467,7 @@ export function QuestionnairePreviewView() {
     }
   };
 
+  // Render question input by type
   const renderQuestionInput = (q: QuestionItem) => {
     const val = responses[q.id];
 
@@ -401,31 +475,38 @@ export function QuestionnairePreviewView() {
       case 'single_choice':
         return (
           <div className="space-y-2">
-            {(q.choices || []).map((choice, i) => {
-              const fallback = q.choices!.length === 6 ? i * 2 : i + 1;
-              const choiceScore = choice.score !== undefined ? choice.score : fallback;
-              const isSelected = val === choice.code;
+            {(q.choices || []).map((choice, idx) => {
+              const isSelected =
+                val !== undefined &&
+                String(val).toLowerCase() === String(choice.code).toLowerCase();
+              const fallbackScore = q.choices!.length === 6 ? idx * 2 : idx + 1;
+              const choiceScore = choice.score !== undefined ? choice.score : fallbackScore;
 
               return (
                 <label
-                  key={choice.id || i}
+                  key={choice.id}
                   className={cn(
-                    'flex items-center justify-between gap-3 p-2.5 rounded-lg border cursor-pointer text-xs transition-all',
+                    'flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all',
                     isSelected
-                      ? 'border-blue-500 bg-blue-50/50 text-blue-950 ring-1 ring-blue-500/20'
-                      : 'border-slate-200 bg-slate-50/40 hover:bg-slate-50 text-slate-800'
+                      ? 'border-blue-500 bg-blue-50/60 text-blue-900 font-semibold shadow-xs'
+                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
                   )}
                 >
-                  <div className="flex items-center gap-2.5 flex-1">
+                  <div className="flex items-center gap-2.5">
                     <input
                       type="radio"
-                      name={`q_${q.id}`}
+                      name={`question_${q.id}`}
+                      value={choice.code}
                       checked={isSelected}
                       onChange={() => handleResponseChange(q.id, choice.code)}
-                      className="h-4 w-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="font-medium text-[11px]">{choice.label}</span>
+                    <span>{choice.label}</span>
                   </div>
+                  {/* Subtle score preview pill in builder */}
+                  <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                    Score: {choiceScore}
+                  </span>
                 </label>
               );
             })}
@@ -529,23 +610,26 @@ export function QuestionnairePreviewView() {
           </div>
         );
 
-      case 'section_heading':
-        return null;
-
       default:
-        return null;
+        return (
+          <input
+            type="text"
+            value={String(val ?? '')}
+            onChange={(e) => handleResponseChange(q.id, e.target.value)}
+            className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900"
+          />
+        );
     }
   };
 
   return (
     <PageContainer
-      title="Live Participant Survey Preview"
-      description="Simulation of participant-facing UI with real-time scoring, dynamic remark fields, and Excel export."
+      title="Questionnaire Template & Response Preview"
+      description="Standard 4-field format with User Details header, 6-level maturity options, dynamic remarks, and automatic Data Collection folder generation."
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Questionnaires', path: '/questionnaires' },
-        { label: questionnaire?.title || 'Instrument', path: `/questionnaires/${id}/builder` },
-        { label: 'Preview', isCurrent: true },
+        { label: questionnaire?.title || 'Preview', isCurrent: true },
       ]}
       actions={
         <div className="flex items-center gap-2 flex-wrap">
@@ -615,11 +699,10 @@ export function QuestionnairePreviewView() {
             </Button>
           </Link>
 
-          <Link to={`/questionnaires/${id}/review`}>
+          <Link to="/data-collection">
             <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
-              <ShieldCheck className="h-4 w-4" />
-              <span>Next: Review & Sign-Off</span>
-              <ArrowRight className="h-4 w-4" />
+              <Database className="h-4 w-4" />
+              <span>Data Collection Folders</span>
             </Button>
           </Link>
         </div>
@@ -674,9 +757,11 @@ export function QuestionnairePreviewView() {
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-3 animate-in fade-in">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                   <div className="space-y-2 flex-1">
-                    <p className="font-bold text-sm text-emerald-950">Survey Submission Successful & Evaluated</p>
+                    <p className="font-bold text-sm text-emerald-950">
+                      Questionnaire Submitted & Stored in Folder: 📁 {userName || 'User'}
+                    </p>
                     <p className="text-[11px] leading-relaxed text-emerald-800">
-                      All responses and remarks have been successfully recorded. Click below to export the score-wise Excel report.
+                      All responses, remarks, and user metadata have been persistently saved into Supabase. You can now view the folder in Data Collection or export the Excel report.
                     </p>
                     <div className="pt-2 flex items-center gap-2 flex-wrap">
                       <Button
@@ -690,20 +775,21 @@ export function QuestionnairePreviewView() {
                         <span>Export Score-Wise Excel Report (.xlsx)</span>
                       </Button>
                       <Link to="/data-collection">
-                        <Button size="sm" variant="outline" className="gap-1.5 border-emerald-400 text-emerald-900 bg-white hover:bg-emerald-100 text-xs font-semibold shadow-xs">
-                          <Database className="h-4 w-4 text-emerald-700" />
-                          <span>View in Data Collection</span>
-                        </Button>
-                      </Link>
-                      <Link to={`/questionnaires/${id}/review`}>
-                        <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs">
-                          <ShieldCheck className="h-4 w-4" />
-                          <span>Next: Review & Sign-Off</span>
-                          <ArrowRight className="h-3.5 w-3.5" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 border-emerald-400 text-emerald-900 bg-white hover:bg-emerald-100 text-xs font-semibold shadow-xs"
+                        >
+                          <FolderCheck className="h-4 w-4 text-emerald-700" />
+                          <span>View Folder in Data Collection</span>
                         </Button>
                       </Link>
                       <Link to={`/questionnaires/${id}/builder`}>
-                        <Button variant="outline" size="sm" className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs"
+                        >
                           <span>Return to Builder</span>
                         </Button>
                       </Link>
@@ -716,22 +802,37 @@ export function QuestionnairePreviewView() {
                 <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-2.5 animate-in fade-in">
                   <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <p className="font-bold">Form Validation Incomplete</p>
+                    <p className="font-bold">Form Incomplete</p>
                     <p className="text-[11px]">
-                      Please resolve {Object.keys(validationErrors).length} required response(s) highlighted below.
+                      Please complete all mandatory fields: user details and required survey questions.
                     </p>
                   </div>
                 </div>
               )}
 
               <form onSubmit={handleSubmitPreview} className="space-y-6">
-                {/* Participant Header Box */}
+                {/* 1. Questionnaire Header Box */}
                 <Card className="border-slate-200 shadow-sm bg-white">
                   <CardHeader className="p-6 border-b border-slate-100">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
                       <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded">
-                        Participant View Simulation
+                        Standard Assessment Template
                       </span>
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 border border-slate-200">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">Template Unique ID:</span>
+                        <code className="text-xs font-mono font-bold text-blue-700">{templateUniqueId}</code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(templateUniqueId);
+                            toast({ title: 'Template ID Copied', description: templateUniqueId });
+                          }}
+                          className="text-slate-400 hover:text-blue-600 ml-1"
+                          title="Copy Unique ID"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                     <CardTitle className="text-xl font-bold text-slate-900">
                       {questionnaire.title}
@@ -744,77 +845,247 @@ export function QuestionnairePreviewView() {
                   </CardHeader>
                 </Card>
 
-                {/* Render Questions */}
+                {/* 2. Top User Details Form (Mandatory for Folder Generation) */}
+                <Card className="border-blue-200 bg-gradient-to-br from-blue-50/50 via-white to-indigo-50/30 shadow-xs">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b border-blue-100">
+                      <div className="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                        <User className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                          User Details (Stores in Data Collection Folder)
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          These details create your individual folder named after your name in Data Collection.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* User Name / Nick Name */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                          <User className="h-3 w-3 text-blue-600" />
+                          <span>User Name / Nick Name</span>
+                          <span className="text-rose-600 font-bold">*</span>
+                        </label>
+                        <Input
+                          value={userName}
+                          onChange={(e) => {
+                            setUserName(e.target.value);
+                            if (validationErrors.userName) {
+                              setValidationErrors((prev) => {
+                                const next = { ...prev };
+                                delete next.userName;
+                                return next;
+                              });
+                            }
+                          }}
+                          placeholder="e.g. Dr. Adithya Rao"
+                          className={cn(
+                            'text-xs bg-white',
+                            validationErrors.userName && 'border-rose-400 focus:ring-rose-400'
+                          )}
+                        />
+                        {validationErrors.userName && (
+                          <p className="text-[10px] font-medium text-rose-600">{validationErrors.userName}</p>
+                        )}
+                      </div>
+
+                      {/* User Email */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                          <Mail className="h-3 w-3 text-blue-600" />
+                          <span>User Email</span>
+                          <span className="text-rose-600 font-bold">*</span>
+                        </label>
+                        <Input
+                          type="email"
+                          value={userEmail}
+                          onChange={(e) => {
+                            setUserEmail(e.target.value);
+                            if (validationErrors.userEmail) {
+                              setValidationErrors((prev) => {
+                                const next = { ...prev };
+                                delete next.userEmail;
+                                return next;
+                              });
+                            }
+                          }}
+                          placeholder="e.g. aditya@bgsdigitalhealth.com"
+                          className={cn(
+                            'text-xs bg-white',
+                            validationErrors.userEmail && 'border-rose-400 focus:ring-rose-400'
+                          )}
+                        />
+                        {validationErrors.userEmail && (
+                          <p className="text-[10px] font-medium text-rose-600">{validationErrors.userEmail}</p>
+                        )}
+                      </div>
+
+                      {/* Department */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                          <Building className="h-3 w-3 text-blue-600" />
+                          <span>Department</span>
+                          <span className="text-rose-600 font-bold">*</span>
+                        </label>
+                        <Input
+                          value={department}
+                          onChange={(e) => {
+                            setDepartment(e.target.value);
+                            if (validationErrors.department) {
+                              setValidationErrors((prev) => {
+                                const next = { ...prev };
+                                delete next.department;
+                                return next;
+                              });
+                            }
+                          }}
+                          placeholder="e.g. Clinical Research & Digital Health"
+                          className={cn(
+                            'text-xs bg-white',
+                            validationErrors.department && 'border-rose-400 focus:ring-rose-400'
+                          )}
+                        />
+                        {validationErrors.department && (
+                          <p className="text-[10px] font-medium text-rose-600">{validationErrors.department}</p>
+                        )}
+                      </div>
+
+                      {/* Research Topic */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                          <BookOpen className="h-3 w-3 text-blue-600" />
+                          <span>Research Topic</span>
+                          <span className="text-rose-600 font-bold">*</span>
+                        </label>
+                        <Input
+                          value={researchTopic}
+                          onChange={(e) => {
+                            setResearchTopic(e.target.value);
+                            if (validationErrors.researchTopic) {
+                              setValidationErrors((prev) => {
+                                const next = { ...prev };
+                                delete next.researchTopic;
+                                return next;
+                              });
+                            }
+                          }}
+                          placeholder="e.g. ACU Institutional Leadership Digital Governance"
+                          className={cn(
+                            'text-xs bg-white',
+                            validationErrors.researchTopic && 'border-rose-400 focus:ring-rose-400'
+                          )}
+                        />
+                        {validationErrors.researchTopic && (
+                          <p className="text-[10px] font-medium text-rose-600">{validationErrors.researchTopic}</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 3. Question Template Cards List */}
                 <div className="space-y-4">
-                  {questions.map((q, idx) => {
-                    const visible = isQuestionVisible(q);
-                    if (!visible) return null;
+                  {questions.map((q, qIndex) => {
+                    if (!isQuestionVisible(q)) return null;
 
-                    const isHeading = q.type === 'section_heading';
-                    const hasError = Boolean(validationErrors[q.id]);
-
-                    if (isHeading) {
+                    if (q.type === 'section_heading') {
                       return (
-                        <div key={q.id} className="pt-4 pb-2 border-b border-slate-200">
-                          <h3 className="text-base font-bold text-slate-900">{q.text}</h3>
+                        <div
+                          key={q.id}
+                          className="pt-6 pb-2 border-b-2 border-blue-600/70 mt-6"
+                        >
+                          <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-blue-600" />
+                            <span>{q.text}</span>
+                          </h3>
                           {q.description && (
-                            <p className="text-xs text-slate-500 mt-0.5">{q.description}</p>
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                              {q.description}
+                            </p>
                           )}
                         </div>
                       );
                     }
 
+                    const hasError = !!validationErrors[q.id];
+
                     return (
                       <Card
                         key={q.id}
                         className={cn(
-                          'border bg-white shadow-xs transition-all',
-                          hasError ? 'border-red-300 ring-2 ring-red-500/20' : 'border-slate-200'
+                          'border transition-all shadow-xs',
+                          hasError
+                            ? 'border-red-400 bg-red-50/20 ring-1 ring-red-400'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
                         )}
                       >
-                        <CardContent className="p-5 space-y-3.5">
-                          {/* Question Number and Prompt */}
+                        <CardContent className="p-5 space-y-4">
+                          {/* Top Question Header */}
                           <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-900 block leading-snug">
-                              <span className="font-bold text-blue-600 mr-1.5">#{idx + 1}</span>
-                              <span>{q.text}</span>
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              <span className="text-blue-700 font-mono">#{qIndex + 1}</span>
+                              <span className="font-mono text-slate-500">{q.variableName}</span>
                               {q.validation.required && (
-                                <span className="text-red-500 ml-1 font-bold">*</span>
+                                <span className="text-red-500 font-semibold">* Mandatory</span>
                               )}
-                            </label>
+                            </div>
+
+                            {/* Question Prompt */}
+                            <p className="text-sm font-semibold text-slate-900 leading-snug">
+                              {q.text}
+                            </p>
+
+                            {/* Participant Guidance */}
                             {q.description && (
-                              <p className="text-[11px] text-slate-500 italic">
+                              <p className="text-xs text-slate-500 italic leading-relaxed">
                                 {q.description}
                               </p>
                             )}
                           </div>
 
-                          {/* Options Radio List */}
+                          {/* Options Radio List (Mandatory 6-option format) */}
                           <div className="pt-1">{renderQuestionInput(q)}</div>
 
-
-
-                          {/* Dynamic Remark Field (Image 1 Requirement) */}
-                          <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                          {/* Dynamic Remark Field */}
+                          <div className="pt-2 border-t border-slate-100 space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <label className="font-medium text-slate-700 flex items-center gap-1.5">
                                 <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
-                                <span>Remark & Explanation</span>
+                                <span>Remark</span>
                               </label>
-                              <span className="text-[10px] text-slate-400 font-medium">Dynamic User Entry</span>
+                              <span className="text-[10px] text-slate-400">Optional</span>
                             </div>
                             <textarea
                               rows={2}
                               value={remarks[q.id] || ''}
                               onChange={(e) => handleRemarkChange(q.id, e.target.value)}
-                              placeholder="Type remarks, evidence, notes, or explanation for this question..."
-                              className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/40 font-sans"
+                              placeholder="Add research remarks, reviewer observations, or justification..."
+                              className="w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans bg-slate-50/50"
                             />
                           </div>
 
+                          {/* Explanation Rationale (Optional) */}
+                          {q.explanation && (
+                            <div className="p-2.5 rounded-lg bg-amber-50/60 border border-amber-200/70 text-amber-900 text-xs flex items-start gap-2">
+                              <HelpCircle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                              <div className="space-y-0.5">
+                                <span className="font-bold text-[10px] uppercase tracking-wider text-amber-800">
+                                  Explanation:
+                                </span>
+                                <p className="text-[11px] leading-relaxed text-amber-900">
+                                  {q.explanation}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
                           {hasError && (
-                            <p className="text-[11px] font-semibold text-red-600 flex items-center gap-1 mt-1">
-                              <AlertCircle className="h-3 w-3" />
+                            <p className="text-xs font-medium text-red-600 flex items-center gap-1 pt-1">
+                              <AlertCircle className="h-3.5 w-3.5" />
                               <span>{validationErrors[q.id]}</span>
                             </p>
                           )}
@@ -824,41 +1095,39 @@ export function QuestionnairePreviewView() {
                   })}
                 </div>
 
-                {/* Submit and Next Actions in Preview */}
-                <div className="flex items-center justify-between pt-2">
-                  <Link to={`/questionnaires/${id}/builder`}>
-                    <Button type="button" variant="outline" size="sm" className="gap-1.5">
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Back to Builder</span>
-                    </Button>
-                  </Link>
+                {/* Submit Questionnaire Card */}
+                <Card className="border-blue-200 bg-gradient-to-r from-blue-50/70 to-indigo-50/50 shadow-sm">
+                  <CardContent className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Submit & Save Questionnaire in Data Collection
+                      </h4>
+                      <p className="text-xs text-slate-600">
+                        Submitting creates folder <strong>📁 {userName ? userName : 'User Name'}</strong> in Data Collection and stores all question responses.
+                      </p>
+                    </div>
 
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleExportExcel}
-                      disabled={isExporting}
-                      className="gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
-                    >
-                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Export to Excel</span>
-                    </Button>
-
-                    <Button type="submit" disabled={isSubmittingToDb} variant={submittedSuccessfully ? 'outline' : 'default'} className="gap-2">
-                      <Send className="h-4 w-4" />
-                      <span>{isSubmittingToDb ? 'Submitting & Saving...' : (submittedSuccessfully ? 'Re-Submit & Save' : 'Submit & Store in Data Collection')}</span>
-                    </Button>
-
-                    <Link to={`/questionnaires/${id}/review`}>
-                      <Button type="button" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
-                        <span>Next: Review & Sign-Off</span>
-                        <ArrowRight className="h-4 w-4" />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="submit"
+                        disabled={isSubmittingToDb}
+                        className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-5 shadow-xs"
+                      >
+                        {isSubmittingToDb ? (
+                          <>
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            <span>Saving in Data Collection...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-3.5 w-3.5" />
+                            <span>Submit Questionnaire</span>
+                          </>
+                        )}
                       </Button>
-                    </Link>
-                  </div>
-                </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </form>
             </div>
           </div>

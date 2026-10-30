@@ -510,9 +510,17 @@ export function QuestionnaireBuilderView() {
               <Card className="border-slate-200 shadow-sm">
                 <CardContent className="p-4 space-y-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 uppercase font-semibold">
-                      Instrument Title
-                    </label>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <label className="text-[10px] text-slate-400 uppercase font-semibold">
+                        Instrument Title & Research Topic
+                      </label>
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 border border-blue-200">
+                        <span className="text-[9px] uppercase font-bold text-blue-600">Template Unique ID:</span>
+                        <code className="text-[10px] font-mono font-bold text-blue-800">
+                          {`TMPL-${(id || 'DRAFT').replace(/-/g, '').slice(0, 8).toUpperCase()}`}
+                        </code>
+                      </div>
+                    </div>
                     <Input
                       value={title}
                       disabled={isPublished}
