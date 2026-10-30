@@ -6,6 +6,7 @@ import * as z from 'zod';
 import { 
   PlusCircle, 
   Upload, 
+  Sparkles, 
   ClipboardList, 
   Database, 
   BarChart3,
@@ -74,7 +75,17 @@ export function QuickActionsBar() {
         </h3>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        {/* Action: AI Generator */}
+        <Button
+          type="button"
+          onClick={() => navigate('/questionnaires/generate')}
+          className="h-auto py-3 px-4 flex flex-col items-center justify-center gap-1.5 bg-white hover:bg-purple-50/50 border border-slate-200 text-slate-800 hover:text-purple-700 hover:border-purple-200 shadow-xs transition-all"
+        >
+          <Sparkles className="h-5 w-5 text-purple-600" />
+          <span className="text-xs font-semibold">AI Generator</span>
+        </Button>
+
         {/* Action 1: Create Study */}
         <Button
           type="button"

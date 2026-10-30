@@ -51,6 +51,7 @@ interface StoredSubmission {
   id: string;
   confirmationId: string;
   templateId: string;
+  questionnaireId: string;
   userName: string;
   userEmail: string;
   department: string;
@@ -160,6 +161,7 @@ export function DataCollectionView() {
         id: resp.id,
         confirmationId,
         templateId,
+        questionnaireId: resp.questionnaire_id || resp.questionnaireId || '',
         userName,
         userEmail,
         department,
@@ -240,6 +242,10 @@ export function DataCollectionView() {
       rows.push(['']);
       rows.push(['No.', 'Question / Variable', 'Response Choice', 'Score', 'Remarks']);
 
+      const matchedQ = (publishedSurveys || []).find(
+        (s) => s.id === sub.questionnaireId || s.title.toLowerCase() === sub.researchTopic.toLowerCase()
+      );
+
       sub.answers.forEach((ans, idx) => {
         let chosenLabel = '';
         let scoreVal: any = '';
@@ -253,7 +259,24 @@ export function DataCollectionView() {
           chosenLabel = String(raw);
         }
 
-        rows.push([idx + 1, ans.variable_name || ans.variableName || `Q${idx + 1}`, chosenLabel, scoreVal, remark]);
+        const qDef = matchedQ?.questions?.find(
+          (q) => q.id === (ans.question_id || ans.questionId) || q.variableName === (ans.variable_name || ans.variableName)
+        );
+
+        const questionText = qDef?.text || ans.variable_name || ans.variableName || `Question ${idx + 1}`;
+        if (qDef?.choices) {
+          const matchedChoice = qDef.choices.find(
+            (c) =>
+              String(c.code).toLowerCase() === String(chosenLabel).toLowerCase() ||
+              String(c.label).toLowerCase() === String(chosenLabel).toLowerCase()
+          );
+          if (matchedChoice) {
+            chosenLabel = matchedChoice.label;
+            scoreVal = matchedChoice.score !== undefined ? matchedChoice.score : '';
+          }
+        }
+
+        rows.push([idx + 1, questionText, chosenLabel, scoreVal, remark]);
       });
 
       if (sub.earnedScore !== undefined && sub.maxScore !== undefined) {
@@ -708,6 +731,7 @@ export function DataCollectionView() {
                         id: resp.id,
                         confirmationId: resp.confirmation_id || resp.confirmationId || resp.id?.slice(0, 8),
                         templateId,
+                        questionnaireId: resp.questionnaire_id || resp.questionnaireId || '',
                         userName: uName,
                         userEmail: userMeta.email || '',
                         department: userMeta.department || 'Clinical Research',
@@ -851,45 +875,98 @@ export function DataCollectionView() {
                   </h4>
 
                   <div className="space-y-3">
-                    {viewingSubmission.answers.map((ans, idx) => {
-                      const raw = ans.raw_value !== undefined ? ans.raw_value : ans.rawValue;
-                      let choiceText = '';
-                      let remarkText = '';
-
-                      if (typeof raw === 'object' && raw !== null) {
-                        choiceText = raw.choice || raw.code || JSON.stringify(raw);
-                        remarkText = raw.remark || '';
-                      } else if (raw !== undefined && raw !== null) {
-                        choiceText = String(raw);
-                      }
-
-                      return (
-                        <div key={idx} className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-blue-700 font-mono">
-                              #{idx + 1} {ans.variable_name || ans.variableName}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              ID: {ans.question_id || ans.questionId}
-                            </span>
-                          </div>
-
-                          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
-                            <div>
-                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Selected Option:</span>
-                              <span className="text-xs font-semibold text-slate-900">{choiceText || '(No answer)'}</span>
-                            </div>
-                          </div>
-
-                          {remarkText && (
-                            <div className="p-2 rounded-lg bg-amber-50/50 border border-amber-200 text-amber-900 text-xs">
-                              <span className="font-bold text-[10px] uppercase block text-amber-800">Dynamic Remark:</span>
-                              <p className="mt-0.5">{remarkText}</p>
-                            </div>
-                          )}
-                        </div>
+                    {(() => {
+                      const matchedQ = (publishedSurveys || []).find(
+                        (s) => s.id === viewingSubmission.questionnaireId || s.title.toLowerCase() === viewingSubmission.researchTopic.toLowerCase()
                       );
-                    })}
+
+                      return viewingSubmission.answers.map((ans, idx) => {
+                        const raw = ans.raw_value !== undefined ? ans.raw_value : ans.rawValue;
+                        let choiceCode = '';
+                        let remarkText = '';
+
+                        if (typeof raw === 'object' && raw !== null) {
+                          choiceCode = raw.choice || raw.code || JSON.stringify(raw);
+                          remarkText = raw.remark || '';
+                        } else if (raw !== undefined && raw !== null) {
+                          choiceCode = String(raw);
+                        }
+
+                        const qDef = matchedQ?.questions?.find(
+                          (q) => q.id === (ans.question_id || ans.questionId) || q.variableName === (ans.variable_name || ans.variableName)
+                        );
+
+                        let choiceLabel = choiceCode;
+                        let choiceScore: any = undefined;
+
+                        if (qDef?.choices) {
+                          const matchedChoice = qDef.choices.find(
+                            (c) =>
+                              String(c.code).toLowerCase() === String(choiceCode).toLowerCase() ||
+                              String(c.label).toLowerCase() === String(choiceCode).toLowerCase()
+                          );
+                          if (matchedChoice) {
+                            choiceLabel = matchedChoice.label;
+                            choiceScore = matchedChoice.score;
+                          }
+                        }
+
+                        return (
+                          <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-blue-700 font-mono text-xs">
+                                #{idx + 1} {qDef?.variableName || ans.variable_name || ans.variableName}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                ID: {ans.question_id || ans.questionId}
+                              </span>
+                            </div>
+
+                            {/* Full Question Prompt Text */}
+                            <p className="text-xs font-semibold text-slate-900 leading-snug">
+                              {qDef?.text || `Question ${idx + 1}`}
+                            </p>
+
+                            {/* Selected Option & Score Badge */}
+                            <div className="p-3 rounded-lg bg-blue-50/50 border border-blue-100 flex items-center justify-between gap-2">
+                              <div className="space-y-0.5">
+                                <span className="text-[10px] uppercase font-bold text-blue-700 block">
+                                  Selected Response Option:
+                                </span>
+                                <span className="text-xs font-semibold text-slate-900">
+                                  {choiceLabel || '(No response recorded)'}
+                                </span>
+                              </div>
+                              {choiceScore !== undefined && (
+                                <span className="text-xs font-mono font-bold bg-blue-600 text-white px-2.5 py-1 rounded-md shadow-xs">
+                                  Score: {choiceScore}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Dynamic Remark */}
+                            {remarkText && (
+                              <div className="p-2.5 rounded-lg bg-amber-50/60 border border-amber-200 text-amber-950 text-xs">
+                                <span className="font-bold text-[10px] uppercase tracking-wider block text-amber-800">
+                                  Dynamic Remark:
+                                </span>
+                                <p className="mt-0.5 text-amber-900 font-medium leading-relaxed">{remarkText}</p>
+                              </div>
+                            )}
+
+                            {/* Explanation Rationale */}
+                            {qDef?.explanation && (
+                              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 text-xs">
+                                <span className="font-bold text-[10px] uppercase tracking-wider block text-slate-500">
+                                  Concept Explanation:
+                                </span>
+                                <p className="mt-0.5 text-slate-600 leading-relaxed">{qDef.explanation}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               </div>

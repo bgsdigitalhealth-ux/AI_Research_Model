@@ -20,7 +20,8 @@ import {
   Lock,
   ArrowRight,
   CheckCircle2,
-  FileText
+  FileText,
+  Folder
 } from 'lucide-react';
 import { QuestionnaireStatus } from '@/types/questionnaire';
 
@@ -69,6 +70,16 @@ export function QuestionnairesView() {
       ]}
       actions={
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate('/data-collection')}
+            className="gap-1.5 border-amber-200 text-amber-800 hover:bg-amber-50/60 shadow-xs"
+          >
+            <Folder className="h-4 w-4 text-amber-600" />
+            <span>User Folders</span>
+          </Button>
+
           <Button
             size="sm"
             variant="outline"
@@ -190,6 +201,9 @@ export function QuestionnairesView() {
                           >
                             {item.title}
                           </Link>
+                          <code className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 text-[10px] font-mono font-bold">
+                            {`TMPL-${item.id.replace(/-/g, '').slice(0, 8).toUpperCase()}`}
+                          </code>
                           <Badge variant="outline" className="font-mono text-[10px]">
                             v{item.version}
                           </Badge>
