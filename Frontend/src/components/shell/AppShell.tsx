@@ -1,11 +1,24 @@
-import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
 import { Toaster } from '@/components/ui/toaster';
 
 export function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // On initial website load or browser refresh, always redirect to the Dashboard
+  useEffect(() => {
+    if (
+      location.pathname !== '/' &&
+      location.pathname !== '/dashboard' &&
+      !location.pathname.startsWith('/login')
+    ) {
+      navigate('/', { replace: true });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -31,4 +44,3 @@ export function AppShell() {
     </div>
   );
 }
-
