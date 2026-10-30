@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
-import { useQuestionnairesList } from '@/hooks/useQuestionnaires';
+import { useQuestionnairesList, useDeleteQuestionnaire } from '@/hooks/useQuestionnaires';
+import { useToast } from '@/components/ui/use-toast';
 import { StatusState } from '@/components/shared/StatusState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,9 +22,11 @@ import {
   ArrowRight,
   CheckCircle2,
   FileText,
-  Folder
+  Folder,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
-import { QuestionnaireStatus } from '@/types/questionnaire';
+import { Questionnaire, QuestionnaireStatus } from '@/types/questionnaire';
 
 const STATUS_BADGES: Record<
   QuestionnaireStatus,
@@ -38,8 +41,12 @@ const STATUS_BADGES: Record<
 
 export function QuestionnairesView() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [questionnaireToDelete, setQuestionnaireToDelete] = useState<Questionnaire | null>(null);
+
+  const deleteMutation = useDeleteQuestionnaire();
 
   const {
     data: questionnaires,
@@ -59,6 +66,26 @@ export function QuestionnairesView() {
       q.description?.toLowerCase().includes(term)
     );
   });
+
+  const handleConfirmDelete = async () => {
+    if (!questionnaireToDelete) return;
+    try {
+      await deleteMutation.mutateAsync(questionnaireToDelete.id);
+      toast({
+        title: 'Questionnaire Deleted',
+        description: `"${questionnaireToDelete.title}" has been permanently deleted.`,
+        variant: 'success',
+      });
+      setQuestionnaireToDelete(null);
+      refetch();
+    } catch (err: any) {
+      toast({
+        title: 'Delete Failed',
+        description: err?.message || 'Failed to delete questionnaire.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <PageContainer
@@ -93,7 +120,7 @@ export function QuestionnairesView() {
           <Button
             size="sm"
             onClick={() => navigate('/questionnaires/new')}
-            className="gap-1.5 shadow-xs"
+            className="gap-1.5 shadow-xs bg-blue-600 hover:bg-blue-700 text-white"
           >
             <Plus className="h-4 w-4" />
             <span>New Questionnaire</span>
@@ -239,14 +266,26 @@ export function QuestionnairesView() {
                         </div>
                       </div>
 
-                      {/* Primary Action Button */}
-                      <div className="shrink-0">
+                      {/* Primary Action Buttons: Open Builder & Delete */}
+                      <div className="shrink-0 flex items-center gap-2">
                         <Link to={`/questionnaires/${item.id}/builder`}>
-                          <Button size="sm" className="gap-1.5 w-full md:w-auto">
+                          <Button size="sm" className="gap-1.5 w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white">
                             <span>{isPublished ? 'View Schema (Locked)' : 'Open Builder'}</span>
                             <ArrowRight className="h-4 w-4" />
                           </Button>
                         </Link>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setQuestionnaireToDelete(item)}
+                          disabled={deleteMutation.isPending}
+                          className="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300"
+                          title="Delete this questionnaire"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>Delete</span>
+                        </Button>
                       </div>
                     </div>
 
@@ -279,11 +318,87 @@ export function QuestionnairesView() {
                         <History className="h-3.5 w-3.5" />
                         <span>Version History & Publish</span>
                       </Link>
+
+                      <span className="text-slate-300">•</span>
+
+                      <button
+                        type="button"
+                        onClick={() => setQuestionnaireToDelete(item)}
+                        className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 font-medium"
+                        title="Delete useless questionnaire"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Delete</span>
+                      </button>
                     </div>
                   </CardContent>
                 </Card>
               );
             })}
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {questionnaireToDelete && (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Delete Questionnaire?</h3>
+                  <p className="text-xs text-slate-500">This action permanently deletes this questionnaire.</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
+                <p className="font-semibold text-xs text-slate-900">{questionnaireToDelete.title}</p>
+                <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                  <span>Version: v{questionnaireToDelete.version}</span>
+                  <span>•</span>
+                  <span>{questionnaireToDelete.questions?.length || 0} Questions</span>
+                  <span>•</span>
+                  <span className="font-mono text-blue-700">
+                    TMPL-{questionnaireToDelete.id.replace(/-/g, '').slice(0, 8).toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to delete this questionnaire? All associated questions and revisions will be permanently removed.
+              </p>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setQuestionnaireToDelete(null)}
+                  disabled={deleteMutation.isPending}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteMutation.isPending}
+                  className="gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
+                >
+                  {deleteMutation.isPending ? (
+                    <>
+                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Delete Questionnaire</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>

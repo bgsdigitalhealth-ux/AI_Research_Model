@@ -7,6 +7,7 @@ import {
   useUpdateQuestionnaire,
   useCreateNewVersion,
   useUploadQuestionsFile,
+  useDeleteQuestionnaire,
 } from '@/hooks/useQuestionnaires';
 import { StatusState } from '@/components/shared/StatusState';
 import { QuestionCard } from './components/QuestionCard';
@@ -33,6 +34,7 @@ import {
   GitBranch,
   Layers,
   ArrowLeft,
+  Trash2,
   Loader2,
   FolderPlus,
   AlertCircle,
@@ -61,6 +63,27 @@ export function QuestionnaireBuilderView() {
   const updateMutation = useUpdateQuestionnaire(id || '');
   const newVersionMutation = useCreateNewVersion(id || '');
   const uploadPdfMutation = useUploadQuestionsFile();
+  const deleteMutation = useDeleteQuestionnaire();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!id || isNew) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+      toast({
+        title: 'Questionnaire Deleted',
+        description: `"${title}" has been permanently deleted.`,
+        variant: 'success',
+      });
+      navigate('/questionnaires', { replace: true });
+    } catch (err: any) {
+      toast({
+        title: 'Delete Failed',
+        description: err?.message || 'Could not delete questionnaire.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
@@ -427,6 +450,21 @@ export function QuestionnaireBuilderView() {
                   <span>{isDirty ? 'Save Draft *' : 'Save Draft'}</span>
                 </>
               )}
+            </Button>
+          )}
+
+          {!isNew && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleteMutation.isPending}
+              className="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300"
+              title="Delete this questionnaire"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
             </Button>
           )}
         </div>
