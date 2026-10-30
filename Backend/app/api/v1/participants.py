@@ -7,6 +7,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.participant import (
+    ParticipantCreateRequest,
     ParticipantMetrics,
     ParticipantResponse,
     ParticipantWithdrawRequest,
@@ -55,6 +56,21 @@ async def list_participants(
 
 
 @router.post(
+    "",
+    response_model=ParticipantResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Enroll a new subject into a research study",
+)
+async def enroll_participant(
+    payload: ParticipantCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DataCollectionService(db)
+    return await service.enroll_participant(payload, current_user)
+
+
+@router.post(
     "/{participant_id}/withdraw",
     response_model=ParticipantResponse,
     status_code=status.HTTP_200_OK,
@@ -72,4 +88,3 @@ async def withdraw_participant(
         payload=payload,
         current_user=current_user,
     )
-
