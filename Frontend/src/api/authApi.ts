@@ -72,6 +72,16 @@ export const authApi = {
   },
 
   /**
+   * Updates password for the current authenticated user.
+   */
+  async changePassword(payload: { currentPassword: string; newPassword: string }): Promise<void> {
+    await apiClient.post('/auth/change-password', {
+      current_password: payload.currentPassword,
+      new_password: payload.newPassword,
+    });
+  },
+
+  /**
    * Logs out user and destroys backend session.
    */
   async logout(): Promise<void> {

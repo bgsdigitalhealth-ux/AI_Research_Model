@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -13,9 +13,11 @@ import {
   HelpCircle,
   FlaskConical,
   X,
+  LogOut,
 } from 'lucide-react';
 import { NavItem } from '@/types/navigation';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 export const NAVIGATION_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -40,6 +42,20 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // Ignore network errors during logout
+    } finally {
+      if (window.innerWidth < 1024) onClose();
+      navigate('/login');
+    }
+  };
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -152,6 +168,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </NavLink>
             );
           })}
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none mt-1"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span className="truncate">Log Out</span>
+          </button>
         </div>
       </aside>
     </>
