@@ -9,6 +9,7 @@ import {
   Sparkles,
   Lightbulb,
   MessageSquare,
+  Folder,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -100,18 +101,22 @@ export function QuestionCard({
 
           <div className="space-y-1.5 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+              <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded">
                 #{index + 1} {question.variableName}
               </span>
 
-              <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', typeMeta.color)}>
-                {typeMeta.label}
-              </span>
+              {question.type !== 'single_choice' && (
+                <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', typeMeta.color)}>
+                  {typeMeta.label}
+                </span>
+              )}
 
               {/* Mandatory Template Field Badge */}
-              <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/60">
-                * Mandatory: Question & Options
-              </span>
+              {!isHeading && (
+                <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/60">
+                  * Mandatory: Question & Options
+                </span>
+              )}
 
 
 
@@ -137,18 +142,42 @@ export function QuestionCard({
               )}
             </div>
 
-            {/* Template Field 1: Question (Mandatory) */}
-            <div className="space-y-0.5">
-              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wide flex items-center gap-1">
-                Question <span className="text-rose-500 font-bold">*</span>
-              </span>
-              <p className={cn(
-                'text-xs text-slate-900 leading-relaxed font-semibold',
-                isHeading && 'text-sm font-bold text-slate-900'
-              )}>
-                {question.text || <span className="text-slate-400 italic">Untitled question</span>}
-              </p>
-            </div>
+            {/* Template Field 1: Question or Section Header */}
+            {isHeading ? (
+              <div className="flex items-center gap-2.5 py-1">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs shrink-0">
+                  <Folder className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      Section Header
+                    </span>
+                    <span className="text-xs font-mono text-slate-500">#{index + 1}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900 pt-0.5">
+                    {question.text || 'Untitled Section'}
+                  </h4>
+                  {question.explanation && (
+                    <p className="text-xs text-slate-500">{question.explanation}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-[11px] font-bold shadow-xs shrink-0">
+                    {index + 1}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wide flex items-center gap-1">
+                    Question <span className="text-rose-500 font-bold">*</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-900 leading-relaxed font-semibold pl-7">
+                  {question.text || <span className="text-slate-400 italic">Untitled question</span>}
+                </p>
+              </div>
+            )}
 
 
           </div>
@@ -187,7 +216,7 @@ export function QuestionCard({
         <div className="pt-2 border-t border-slate-100 space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wide flex items-center gap-1">
-              Options (Single Choice Radio) <span className="text-rose-500 font-bold">*</span>
+              Response Options <span className="text-rose-500 font-bold">*</span>
             </span>
             <span className="text-[10px] text-slate-400 font-medium">Mandatory</span>
           </div>

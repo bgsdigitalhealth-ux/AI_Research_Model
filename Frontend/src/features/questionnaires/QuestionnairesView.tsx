@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useQuestionnairesList, useDeleteQuestionnaire } from '@/hooks/useQuestionnaires';
+import { questionnairesApi } from '@/api/questionnairesApi';
 import { useToast } from '@/components/ui/use-toast';
 import { StatusState } from '@/components/shared/StatusState';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,6 +49,8 @@ export function QuestionnairesView() {
 
   const deleteMutation = useDeleteQuestionnaire();
 
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+
   const {
     data: questionnaires,
     isLoading,
@@ -58,6 +61,7 @@ export function QuestionnairesView() {
   } = useQuestionnairesList(statusFilter ? { status: statusFilter } : undefined);
 
   const filtered = questionnaires?.filter((q) => {
+    if (statusFilter && q.status !== statusFilter) return false;
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -66,6 +70,27 @@ export function QuestionnairesView() {
       q.description?.toLowerCase().includes(term)
     );
   });
+
+  const handleStatusChange = async (id: string, newStatus: QuestionnaireStatus) => {
+    try {
+      setUpdatingStatusId(id);
+      await questionnairesApi.updateQuestionnaire(id, { status: newStatus });
+      toast({
+        title: 'Status Updated',
+        description: `Questionnaire status changed to "${(STATUS_BADGES[newStatus]?.label || newStatus).toUpperCase()}".`,
+        variant: 'success',
+      });
+      refetch();
+    } catch (err: any) {
+      toast({
+        title: 'Status Update Failed',
+        description: err?.message || 'Failed to update questionnaire status.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  };
 
   const handleConfirmDelete = async () => {
     if (!questionnaireToDelete) return;
@@ -234,9 +259,22 @@ export function QuestionnairesView() {
                           <Badge variant="outline" className="font-mono text-[10px]">
                             v{item.version}
                           </Badge>
-                          <Badge variant={statusMeta.variant} className="text-[10px]">
-                            {statusMeta.label}
-                          </Badge>
+                          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 shadow-2xs">
+                            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Status:</span>
+                            <select
+                              value={item.status}
+                              disabled={updatingStatusId === item.id}
+                              onChange={(e) => handleStatusChange(item.id, e.target.value as QuestionnaireStatus)}
+                              className="text-[11px] font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer py-0.5"
+                              title="Update questionnaire lifecycle status"
+                            >
+                              <option value="draft">Draft</option>
+                              <option value="under_review">Under Review</option>
+                              <option value="approved">Approved</option>
+                              <option value="published">Published</option>
+                              <option value="archived">Archived</option>
+                            </select>
+                          </div>
 
                           {item.isAiGenerated && (
                             <Badge variant="secondary" className="text-[10px] gap-1 text-blue-700 bg-blue-50 border-blue-200">

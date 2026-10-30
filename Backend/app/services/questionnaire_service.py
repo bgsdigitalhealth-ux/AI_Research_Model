@@ -660,7 +660,7 @@ class QuestionnaireService:
 
 
 
-        if q.is_published_immutable or q.status == "published":
+        if (q.is_published_immutable or q.status == "published") and payload.status is None:
 
             raise VersionImmutableError(
 

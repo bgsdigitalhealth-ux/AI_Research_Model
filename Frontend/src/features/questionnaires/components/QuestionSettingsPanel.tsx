@@ -230,11 +230,11 @@ export function QuestionSettingsPanel({
           </div>
         </div>
 
-        {/* Template Field 1: Question Prompt Text (Mandatory) */}
+        {/* Template Field 1: Question Prompt Text or Section Title (Mandatory) */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-semibold text-slate-700">
-              Question Prompt Text <span className="text-rose-500 font-bold">*</span>
+              {question.type === 'section_heading' ? 'Section Title' : 'Question Prompt Text'} <span className="text-rose-500 font-bold">*</span>
             </label>
             <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-semibold">
               Mandatory
@@ -245,10 +245,30 @@ export function QuestionSettingsPanel({
             value={question.text}
             disabled={isPublished}
             onChange={(e) => handleUpdate({ text: e.target.value })}
-            placeholder="Enter the question or instruction presented to the research subject..."
+            placeholder={
+              question.type === 'section_heading'
+                ? 'e.g. Section 2: Clinical Assessment & Governance'
+                : 'Enter the question or instruction presented to the research subject...'
+            }
             className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-sans"
           />
         </div>
+
+        {question.type === 'section_heading' && (
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-700">
+              Section Guidance / Instructions (Optional)
+            </label>
+            <textarea
+              rows={2}
+              value={question.explanation || ''}
+              disabled={isPublished}
+              onChange={(e) => handleUpdate({ explanation: e.target.value })}
+              placeholder="Directions or guidance displayed to participants for this section..."
+              className="w-full rounded-lg border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 font-sans"
+            />
+          </div>
+        )}
 
 
 
@@ -298,6 +318,7 @@ export function QuestionSettingsPanel({
         )}
 
         {/* Validation Rules Card */}
+        {question.type !== 'section_heading' && (
         <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
           <div className="flex items-center justify-between">
             <span className="font-bold text-slate-800 text-xs">
@@ -386,51 +407,55 @@ export function QuestionSettingsPanel({
             </div>
           )}
         </div>
+        )}
 
         {/* Template Field 2: Response Choices Manager (Mandatory for Choice types) */}
         {isChoiceType && (
           <div className="space-y-2.5 pt-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-slate-800 text-xs">
-                  Response Options ({question.choices?.length || 0}) <span className="text-rose-500 font-bold">*</span>
-                </span>
-                <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-semibold">
-                  Mandatory
-                </span>
-              </div>
-              {!isPublished && (
+            <div className="space-y-2 pb-2 border-b border-slate-100">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-800 text-xs">
+                    Response Options ({question.choices?.length || 0}) <span className="text-rose-500 font-bold">*</span>
+                  </span>
+                  <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-semibold border border-rose-200/50">
+                    Mandatory
+                  </span>
+                </div>
+                {!isPublished && (
                   <button
                     type="button"
                     onClick={handleFormatChoicesABC}
-                    className="text-[10px] font-semibold text-blue-600 hover:underline"
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline"
                     title="Format options with a, b, c labels"
                   >
-                    a, b, c format
+                    Format a, b, c
                   </button>
-                  <span className="text-slate-300">·</span>
-                                    <button
+                )}
+              </div>
+
+              {!isPublished && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-medium">Quick Presets:</span>
+                  <button
                     type="button"
                     onClick={handlePopulateMaturityRubric}
-                    className="text-[10px] font-semibold text-emerald-700 hover:underline bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
+                    className="text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 transition-colors"
                     title="Populate 6-option maturity levels with scores 0, 2, 4, 6, 8, 10"
                   >
                     + 6-Level Maturity (0-10)
                   </button>
-                  <span className="text-slate-300">·</span>
                   <button
                     type="button"
                     onClick={handlePopulateLikert}
-                    className="text-[10px] font-semibold text-blue-600 hover:underline"
+                    className="text-[10px] font-semibold text-blue-700 hover:bg-blue-100 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 transition-colors"
                   >
                     + Likert 5
                   </button>
-                  <span className="text-slate-300">·</span>
                   <button
                     type="button"
                     onClick={handlePopulateYesNo}
-                    className="text-[10px] font-semibold text-blue-600 hover:underline"
+                    className="text-[10px] font-semibold text-slate-700 hover:bg-slate-100 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 transition-colors"
                   >
                     + Yes/No
                   </button>
@@ -438,7 +463,7 @@ export function QuestionSettingsPanel({
               )}
             </div>
 
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {(question.choices || []).map((choice) => (
                 <div
                   key={choice.id}

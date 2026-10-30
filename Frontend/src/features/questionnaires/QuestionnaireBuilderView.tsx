@@ -275,14 +275,36 @@ export function QuestionnaireBuilderView() {
   const handleAddSection = () => {
     if (isPublished) return;
     const nextIdx = sections.length + 1;
+    const secId = `sec_${Date.now()}_${nextIdx}`;
     const newSec: QuestionnaireSection = {
-      id: `sec_${Date.now()}_${nextIdx}`,
+      id: secId,
       title: `Section ${nextIdx}: General Assessment`,
       description: 'Participant guidance for this section.',
       order: nextIdx,
     };
     setSections((prev) => [...prev, newSec]);
+
+    const nextQIdx = questions.length + 1;
+    const newSectionHeading: QuestionItem = {
+      id: `q_${Date.now()}_sec_${nextIdx}`,
+      variableName: `SEC_${nextIdx}`,
+      type: 'section_heading',
+      text: `Section ${nextIdx}: General Assessment`,
+      explanation: 'Participant guidance for this section.',
+      order: nextQIdx,
+      sectionId: secId,
+      validation: { required: false },
+    };
+
+    setQuestions((prev) => [...prev, newSectionHeading]);
+    setSelectedQuestionId(newSectionHeading.id);
     setIsDirty(true);
+
+    toast({
+      title: 'Section Added',
+      description: `Section ${nextIdx} added. You can now rename it and organize questions under it.`,
+      variant: 'success',
+    });
   };
 
   // Save changes
