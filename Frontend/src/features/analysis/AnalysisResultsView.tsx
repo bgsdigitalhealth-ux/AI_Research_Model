@@ -168,18 +168,18 @@ export function AnalysisResultsView() {
                 <div className="rounded-md bg-slate-50 p-3">
                   <span className="text-[11px] font-semibold uppercase text-slate-400 block">p-value</span>
                   <span className={`text-lg font-bold ${
-                    results.pValue !== undefined && results.pValue < 0.05
+                    results.pValue != null && results.pValue < 0.05
                       ? 'text-emerald-600'
                       : 'text-slate-900'
                   }`}>
-                    {results.pValue !== undefined
+                    {results.pValue != null
                       ? results.pValue < 0.001
                         ? '< 0.001'
-                        : results.pValue.toFixed(4)
+                        : Number(results.pValue).toFixed(4)
                       : '—'}
                   </span>
                   <span className="text-[10px] text-slate-500 block">
-                    {results.pValue !== undefined && results.pValue < 0.05 ? 'Significant (p < .05)' : 'Non-significant'}
+                    {results.pValue != null && results.pValue < 0.05 ? 'Significant (p < .05)' : 'Non-significant'}
                   </span>
                 </div>
 
@@ -188,11 +188,11 @@ export function AnalysisResultsView() {
                     Effect Size {results.effectSize?.name && `(${results.effectSize.name})`}
                   </span>
                   <span className="text-lg font-bold text-slate-900">
-                    {results.effectSize?.value !== undefined ? results.effectSize.value.toFixed(3) : '—'}
+                    {results.effectSize?.value != null ? Number(results.effectSize.value).toFixed(3) : '—'}
                   </span>
-                  {results.effectSize?.ciLower !== undefined && (
+                  {results.effectSize?.ciLower != null && results.effectSize?.ciUpper != null && (
                     <span className="text-[10px] text-slate-500 block">
-                      95% CI [{results.effectSize.ciLower.toFixed(2)}, {results.effectSize.ciUpper?.toFixed(2)}]
+                      95% CI [{Number(results.effectSize.ciLower).toFixed(2)}, {Number(results.effectSize.ciUpper).toFixed(2)}]
                     </span>
                   )}
                 </div>
@@ -200,8 +200,8 @@ export function AnalysisResultsView() {
                 <div className="rounded-md bg-slate-50 p-3">
                   <span className="text-[11px] font-semibold uppercase text-slate-400 block">Test Statistic</span>
                   <span className="text-lg font-bold text-slate-900 font-mono">
-                    {results.testStatistic
-                      ? `${results.testStatistic.name} = ${results.testStatistic.value.toFixed(2)}`
+                    {results.testStatistic && results.testStatistic.value != null
+                      ? `${results.testStatistic.name} = ${Number(results.testStatistic.value).toFixed(2)}`
                       : '—'}
                   </span>
                   <span className="text-[10px] text-slate-500 block">

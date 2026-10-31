@@ -166,7 +166,7 @@ export function AnalysisHistoryView() {
                           {new Date(run.queuedAt).toLocaleString()}
                         </td>
                         <td className="px-4 py-3 font-mono text-slate-600">
-                          {run.durationSeconds !== undefined ? `${run.durationSeconds.toFixed(1)}s` : '—'}
+                          {run.durationSeconds != null ? `${Number(run.durationSeconds).toFixed(1)}s` : '—'}
                         </td>
                         <td className="px-4 py-3 text-slate-600">
                           {run.executedBy?.name || 'Researcher'}

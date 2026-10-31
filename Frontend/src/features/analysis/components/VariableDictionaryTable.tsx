@@ -101,7 +101,7 @@ export function VariableDictionaryTable({
                       </td>
                       <td className="px-4 py-3 text-right font-mono">
                         <span className={v.missingPercentage > 10 ? 'text-amber-600 font-semibold' : 'text-slate-600'}>
-                          {v.missingCount} ({v.missingPercentage.toFixed(1)}%)
+                          {v.missingCount} ({v.missingPercentage != null ? v.missingPercentage.toFixed(1) : '0.0'}%)
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-slate-600">{v.uniqueValuesCount}</td>

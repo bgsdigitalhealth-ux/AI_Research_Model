@@ -61,7 +61,7 @@ export function AssumptionWarningsCard({ warnings }: AssumptionWarningsCardProps
                   {item.testUsed && (
                     <span className="text-[11px] font-normal opacity-80">
                       Test: {item.testUsed}
-                      {item.pValue !== undefined && ` (p = ${item.pValue.toFixed(3)})`}
+                      {item.pValue != null && ` (p = ${Number(item.pValue).toFixed(3)})`}
                     </span>
                   )}
                 </div>

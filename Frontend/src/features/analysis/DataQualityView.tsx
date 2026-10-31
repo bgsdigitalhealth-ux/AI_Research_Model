@@ -162,13 +162,13 @@ export function DataQualityView() {
               />
               <MetricCard
                 title="Complete Cases"
-                value={`${qualityReport.completeCasesPercentage.toFixed(1)}%`}
+                value={`${(qualityReport.completeCasesPercentage ?? 0).toFixed(1)}%`}
                 icon={CheckCircle2}
                 description={`${qualityReport.completeCasesCount} rows without missingness`}
               />
               <MetricCard
                 title="Overall Missingness"
-                value={`${qualityReport.overallMissingnessPercentage.toFixed(1)}%`}
+                value={`${(qualityReport.overallMissingnessPercentage ?? 0).toFixed(1)}%`}
                 icon={TrendingDown}
                 description="Missing cells across dataset"
               />
@@ -247,7 +247,7 @@ export function DataQualityView() {
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
                               <span className={isSevere ? 'font-semibold text-red-600' : 'text-slate-600'}>
-                                {v.missingCount} ({v.missingPercentage.toFixed(1)}%)
+                                {v.missingCount} ({(v.missingPercentage ?? 0).toFixed(1)}%)
                               </span>
                             </td>
                             <td className="px-4 py-3 w-40">
@@ -265,7 +265,7 @@ export function DataQualityView() {
                                   />
                                 </div>
                                 <span className="text-[10px] text-slate-500 font-mono">
-                                  {completeness.toFixed(0)}%
+                                  {(completeness ?? 0).toFixed(0)}%
                                 </span>
                               </div>
                             </td>
