@@ -6,7 +6,7 @@ import { MetricCard } from '@/components/shared/MetricCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useDatasets, useSupportedMethods, useAnalysisRuns, useAnalysisRuntime } from '@/hooks/useAnalysis';
+import { useDatasets, useSupportedMethods, useAnalysisRuns } from '@/hooks/useAnalysis';
 import {
   Play,
   Database,
@@ -48,7 +48,6 @@ export function AnalysisWorkbenchView() {
     refetch: refetchRuns,
   } = useAnalysisRuns();
 
-  const { data: runtime } = useAnalysisRuntime();
 
   const totalDatasets = datasets?.length ?? 0;
   const totalApprovedMethods = methods?.filter((m) => m.isApprovedInSap).length ?? 0;
@@ -58,7 +57,7 @@ export function AnalysisWorkbenchView() {
   return (
     <PageContainer
       title="Statistical Analysis Workbench"
-      description="Select frozen dataset snapshots, configure prespecified statistical tests, execute analytical pipelines, and inspect verified outputs."
+      
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Analysis', isCurrent: true },
@@ -101,60 +100,33 @@ export function AnalysisWorkbenchView() {
             title="Frozen Snapshots"
             value={totalDatasets}
             icon={Database}
-            description="Immutable datasets ready for analysis"
+            
             loading={isDatasetsLoading}
           />
           <MetricCard
             title="SAP Approved Methods"
             value={totalApprovedMethods}
             icon={FileCheck2}
-            description="Prespecified in protocol"
+            
             loading={isMethodsLoading}
           />
           <MetricCard
             title="Total Executions"
             value={totalRuns}
             icon={History}
-            description="Audit-logged analytical runs"
+            
             loading={isRunsLoading}
           />
           <MetricCard
             title="Verified Completed"
             value={completedRuns}
             icon={CheckCircle2}
-            description="Available for report synthesis"
+            
             loading={isRunsLoading}
           />
         </div>
 
-        {/* Isolated Docker R Container Runtime Status */}
-        <div className="rounded-lg border border-slate-200 bg-linear-to-r from-blue-50/60 via-slate-50/40 to-white p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold font-mono text-base shadow-xs">
-              R
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-semibold text-slate-900">
-                  {runtime?.engine || 'Docker Containerized R Runtime (GCP Compliant)'}
-                </h4>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {runtime?.docker_status || 'Active (Docker Desktop)'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Image: <code className="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded text-[11px]">researchflow-r-engine:latest</code> | Runtime: <span className="font-medium text-slate-700">R 4.6.2 (Diversified Portfolio)</span> | Sandbox: <span className="text-slate-600">Isolated WSL2 Container (--network none)</span>
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 shrink-0">
-            <Badge variant="outline" className="text-[11px] font-mono">stats (base)</Badge>
-            <Badge variant="outline" className="text-[11px] font-mono">jsonlite (2.0)</Badge>
-            <Badge variant="outline" className="text-[11px] font-mono">survival (3.8)</Badge>
-            <Badge variant="outline" className="text-[11px] font-mono">MASS (7.3)</Badge>
-          </div>
-        </div>
+
 
         {/* Workbench Tab Navigation */}
         <div className="border-b border-slate-200">
@@ -253,9 +225,7 @@ export function AnalysisWorkbenchView() {
                         )}
                       </div>
 
-                      {dataset.description && (
-                        <p className="mt-2 text-xs text-slate-600 line-clamp-2">{dataset.description}</p>
-                      )}
+
 
                       <div className="mt-4 grid grid-cols-3 gap-2 rounded-md bg-slate-50 p-2.5 text-xs text-slate-600">
                         <div>
@@ -343,7 +313,7 @@ export function AnalysisWorkbenchView() {
                         <tr key={method.id} className="hover:bg-slate-50">
                           <td className="px-4 py-3">
                             <span className="font-semibold text-slate-900 block">{method.name}</span>
-                            <span className="text-[11px] text-slate-500 line-clamp-1">{method.description}</span>
+                            
                           </td>
                           <td className="px-4 py-3">
                             <Badge variant="secondary" className="text-[10px]">

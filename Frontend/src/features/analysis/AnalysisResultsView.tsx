@@ -59,7 +59,7 @@ export function AnalysisResultsView() {
   return (
     <PageContainer
       title="Statistical Results & Verification"
-      description="Authoritative numerical estimates, model diagnostics, confidence bounds, and AI clinical interpretations."
+      
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Analysis', path: '/analysis' },
@@ -93,7 +93,7 @@ export function AnalysisResultsView() {
             className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
           >
             <FilePlus className="h-4 w-4" />
-            <span>Synthesize CSR Report</span>
+            <span>Review & Synthesize Report</span>
           </Button>
         </div>
       }
@@ -276,7 +276,7 @@ export function AnalysisResultsView() {
               <EstimatesTable
                 estimates={results.estimatesTable}
                 title="Authoritative Parameter Estimates &amp; Coefficients"
-                notes="Standard errors, test statistics, and confidence intervals calculated under prespecified degrees of freedom."
+                
               />
             )}
 
@@ -298,9 +298,7 @@ export function AnalysisResultsView() {
                       <h4 className="text-xs font-semibold text-slate-900">
                         Verified Containerized R Code
                       </h4>
-                      <p className="text-[11px] text-slate-500">
-                        Executed inside isolated Docker container (<code className="font-mono text-slate-700 bg-slate-200/60 px-1 py-0.5 rounded">researchflow-r-engine:latest</code>)
-                      </p>
+
                     </div>
                   </div>
                   <Button

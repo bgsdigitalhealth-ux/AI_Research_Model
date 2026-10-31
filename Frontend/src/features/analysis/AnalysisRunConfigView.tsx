@@ -165,7 +165,7 @@ export function AnalysisRunConfigView() {
   return (
     <PageContainer
       title="Configure Statistical Analysis"
-      description="Map study variables, select validated analytical methods prespecified in the SAP, and dispatch compute jobs."
+      
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Analysis', path: '/analysis' },
@@ -280,7 +280,7 @@ export function AnalysisRunConfigView() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-500 line-clamp-2">{m.description}</p>
+                          
                           <div className="mt-2 text-[10px] text-slate-400">
                             Category: {m.category}
                           </div>
@@ -289,14 +289,7 @@ export function AnalysisRunConfigView() {
                     })}
                   </div>
 
-                  {selectedMethod && (
-                    <div className="mt-3 rounded-md bg-blue-50/50 p-3 text-xs text-blue-900 border border-blue-100">
-                      <div className="font-semibold">{selectedMethod.name} Diagnostic Requirements:</div>
-                      <div className="mt-1 text-[11px] text-blue-800">
-                        Assumptions automatically evaluated: {selectedMethod.assumptionsTested.join(', ')}
-                      </div>
-                    </div>
-                  )}
+
                 </div>
               )}
             </div>
@@ -321,17 +314,17 @@ export function AnalysisRunConfigView() {
               ) : (
                 <div className="space-y-4">
                   {/* Dynamic Active Variable Mapping Summary */}
-                  <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-md bg-blue-50/70 border border-blue-100 text-xs text-blue-900">
+                  <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-800">
                     <span className="font-semibold flex items-center gap-1.5">
                       <Sliders className="h-3.5 w-3.5 text-blue-600" />
                       <span>Active Mapping:</span>
                     </span>
                     <span className="flex items-center gap-1">
-                      Outcome ($Y$): <Badge variant="default" className="font-mono text-[11px] font-bold">{dependentVar || 'Auto-Selected'}</Badge>
+                      Outcome (Y): <Badge variant="default" className="font-mono text-[11px] font-bold">{dependentVar || 'Auto-Selected'}</Badge>
                     </span>
                     <span className="text-slate-300">|</span>
                     <span className="flex items-center gap-1">
-                      Predictors ($X$): <Badge variant="outline" className="font-mono text-[11px] bg-white text-slate-800">{independentVars.length > 0 ? independentVars.join(', ') : 'Auto-Selected'}</Badge>
+                      Predictors (X): <Badge variant="outline" className="font-mono text-[11px] bg-white text-slate-800">{independentVars.length > 0 ? independentVars.join(', ') : 'Auto-Selected'}</Badge>
                     </span>
                     {covariates.length > 0 && (
                       <>
@@ -347,7 +340,7 @@ export function AnalysisRunConfigView() {
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="block text-xs font-semibold text-slate-800">
-                        Primary Outcome / Dependent Variable ($Y$)
+                        Primary Outcome / Dependent Variable (Y)
                       </label>
                       <span className="text-[11px] text-blue-600 font-medium">Click any variable below to set as Primary Outcome</span>
                     </div>
@@ -406,7 +399,7 @@ export function AnalysisRunConfigView() {
                   {/* Independent Variables */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-800 mb-1">
-                      Independent Variables / Predictors / Treatment Arms ($X$)
+                      Independent Variables / Predictors / Treatment Arms (X)
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 border border-slate-200 rounded-md bg-slate-50">
                       {variables.map((v) => {
@@ -497,16 +490,16 @@ export function AnalysisRunConfigView() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Confidence Interval Level ($\alpha$)
+                    Confidence Interval Level (α)
                   </label>
                   <select
                     value={confidenceLevel}
                     onChange={(e) => setConfidenceLevel(Number(e.target.value))}
                     className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-blue-500 focus:outline-hidden"
                   >
-                    <option value={90}>90% (Two-sided $\alpha = 0.10$)</option>
-                    <option value={95}>95% Standard (Two-sided $\alpha = 0.05$)</option>
-                    <option value={99}>99% Rigorous (Two-sided $\alpha = 0.01$)</option>
+                    <option value={90}>90% (Two-sided α = 0.10)</option>
+                    <option value={95}>95% Standard (Two-sided α = 0.05)</option>
+                    <option value={99}>99% Rigorous (Two-sided α = 0.01)</option>
                   </select>
                 </div>
 

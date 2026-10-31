@@ -107,7 +107,7 @@ export function ExportCenterView() {
   return (
     <PageContainer
       title="Research Data &amp; Reports Export Centre"
-      description="Generate governance-compliant export packages in CSV, XLSX, PDF, and DOCX formats with mandatory de-identification."
+      
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Reports', path: '/reports' },

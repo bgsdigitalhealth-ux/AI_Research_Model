@@ -47,7 +47,7 @@ export function ReportsView() {
   return (
     <PageContainer
       title="Research Reports &amp; Manuscripts"
-      description="Compile manuscript drafts, Clinical Study Reports (CSR), regulatory dossiers, and interim analytical packages."
+      
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Reports', isCurrent: true },
@@ -82,21 +82,21 @@ export function ReportsView() {
             title="Total Reports"
             value={totalReports}
             icon={BookOpen}
-            description="CSRs, manuscripts, and dossiers"
+            
             loading={isLoading}
           />
           <MetricCard
             title="Regulatory Approved"
             value={approvedReports}
             icon={CheckCircle2}
-            description="Verified against prespecified SAP"
+            
             loading={isLoading}
           />
           <MetricCard
             title="Export Packages"
             value="CSV • XLSX • PDF • DOCX"
             icon={FileDown}
-            description="Governance-compliant formats"
+            
           />
         </div>
 

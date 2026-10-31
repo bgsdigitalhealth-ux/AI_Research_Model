@@ -68,12 +68,18 @@ async def create_report(
     summary="Preview synthesized report draft for analysis run",
 )
 async def preview_new_report(
-    analysis_run_id: Optional[uuid.UUID] = Query(None, alias="analysisRunId"),
+    analysis_run_id: Optional[str] = Query(None, alias="analysisRunId"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = ReportExportService(db)
-    return await service.synthesize_draft_report(analysis_run_id, current_user)
+    parsed_run_id = None
+    if analysis_run_id:
+        try:
+            parsed_run_id = uuid.UUID(analysis_run_id)
+        except (ValueError, AttributeError):
+            parsed_run_id = None
+    return await service.synthesize_draft_report(parsed_run_id, current_user)
 
 
 @reports_router.get(

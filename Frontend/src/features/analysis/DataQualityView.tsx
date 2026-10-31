@@ -58,7 +58,7 @@ export function DataQualityView() {
   return (
     <PageContainer
       title="Data Quality &amp; Missingness Diagnostics"
-      description="Inspect dataset completeness, variable distributions, missingness patterns (MCAR/MAR), and outlier flags."
+      
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Analysis', path: '/analysis' },
@@ -152,25 +152,25 @@ export function DataQualityView() {
                 title="Total Records"
                 value={qualityReport.totalRecords.toLocaleString()}
                 icon={Database}
-                description="Sample row count"
+                
               />
               <MetricCard
                 title="Variables Tracked"
                 value={qualityReport.totalVariables}
                 icon={Layers}
-                description="Columns in schema"
+                
               />
               <MetricCard
                 title="Complete Cases"
                 value={`${(qualityReport.completeCasesPercentage ?? 0).toFixed(1)}%`}
                 icon={CheckCircle2}
-                description={`${qualityReport.completeCasesCount} rows without missingness`}
+                
               />
               <MetricCard
                 title="Overall Missingness"
                 value={`${(qualityReport.overallMissingnessPercentage ?? 0).toFixed(1)}%`}
                 icon={TrendingDown}
-                description="Missing cells across dataset"
+                
               />
             </div>
 

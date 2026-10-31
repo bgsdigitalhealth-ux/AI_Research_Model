@@ -13,11 +13,15 @@ export function useReports(params?: { studyId?: string; type?: string; status?: 
 export function useReport(id?: string, analysisRunId?: string | null) {
   return useQuery({
     queryKey: ['report', id, analysisRunId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!id) throw new Error('Report ID is required');
       if (id === 'new') {
-        const query = analysisRunId ? `?analysisRunId=${analysisRunId}` : '';
-        return reportsApi.getReportById(`new${query}`);
+        try {
+          const query = analysisRunId ? `?analysisRunId=${analysisRunId}` : '';
+          return await reportsApi.getReportById(`new${query}`);
+        } catch {
+          return null;
+        }
       }
       return reportsApi.getReportById(id);
     },

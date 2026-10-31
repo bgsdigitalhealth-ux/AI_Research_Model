@@ -44,7 +44,7 @@ export function AnalysisHistoryView() {
   return (
     <PageContainer
       title="Analysis Execution Audit Trail"
-      description="Immutable historical log of all computational runs, model specifications, and execution results."
+      
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'Analysis', path: '/analysis' },
