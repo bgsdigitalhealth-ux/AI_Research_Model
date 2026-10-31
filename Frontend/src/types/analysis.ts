@@ -172,6 +172,7 @@ export interface AiStatisticalExplanation {
   plainLanguageSummary: string;
   confidenceNote: string;
   verifiedAgainstProtocol: boolean;
+  rCode?: string;
   generatedAt: string;
 }
 
@@ -208,6 +209,7 @@ export interface StatisticalResult {
   scatterPlotData?: ScatterPlotDataPoint[];
   survivalData?: SurvivalDataPoint[];
   aiExplanation?: AiStatisticalExplanation;
+  rCode?: string;
   generatedAt: string;
 }
 

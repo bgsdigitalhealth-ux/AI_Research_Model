@@ -235,6 +235,7 @@ class AiStatisticalExplanation(BaseSchema):
     plain_language_summary: str = Field(..., alias="plainLanguageSummary")
     confidence_note: str = Field(..., alias="confidenceNote")
     verified_against_protocol: bool = Field(True, alias="verifiedAgainstProtocol")
+    r_code: Optional[str] = Field(None, alias="rCode")
     generated_at: datetime = Field(..., alias="generatedAt")
 
 
@@ -285,6 +286,7 @@ class StatisticalResultResponse(BaseSchema):
     scatter_plot_data: Optional[List[ScatterPlotDataPoint]] = Field(None, alias="scatterPlotData")
     survival_data: Optional[List[SurvivalDataPoint]] = Field(None, alias="survivalData")
     ai_explanation: Optional[AiStatisticalExplanation] = Field(None, alias="aiExplanation")
+    r_code: Optional[str] = Field(None, alias="rCode")
     generated_at: datetime = Field(..., alias="generatedAt")
 
 

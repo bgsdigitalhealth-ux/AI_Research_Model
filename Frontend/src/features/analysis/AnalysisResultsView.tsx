@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { StatusState } from '@/components/shared/StatusState';
@@ -24,11 +25,21 @@ import {
   Activity,
   Layers,
   Sparkles,
+  Copy,
+  Check,
+  Terminal,
 } from 'lucide-react';
 
 export function AnalysisResultsView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [copiedRCode, setCopiedRCode] = useState(false);
+
+  const handleCopyRCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedRCode(true);
+    setTimeout(() => setCopiedRCode(false), 2000);
+  };
 
   const {
     data: run,
@@ -256,6 +267,50 @@ export function AnalysisResultsView() {
 
             {/* AI Clinical & Statistical Interpretation - Clearly Separated */}
             <AiInterpretationCard explanation={results.aiExplanation} />
+
+            {/* Containerized Verified R Execution Code */}
+            {(results.rCode || results.aiExplanation?.rCode) && (
+              <div className="rounded-lg border border-slate-200 bg-white shadow-xs overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5 bg-slate-50/70">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold font-mono text-xs shadow-xs">
+                      R
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-900">
+                        Verified Containerized R Code
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Executed inside isolated Docker container (<code className="font-mono text-slate-700 bg-slate-200/60 px-1 py-0.5 rounded">researchflow-r-engine:latest</code>)
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyRCode(results.rCode || results.aiExplanation?.rCode || '')}
+                    className="h-8 gap-1.5 text-xs text-slate-700 hover:text-slate-900"
+                  >
+                    {copiedRCode ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        <span className="text-emerald-700 font-medium">Copied to Clipboard</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        <span>Copy Verified R Code</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <div className="p-4 bg-slate-900 text-slate-100 font-mono text-xs overflow-x-auto">
+                  <pre className="leading-relaxed whitespace-pre-wrap">
+                    {results.rCode || results.aiExplanation?.rCode}
+                  </pre>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

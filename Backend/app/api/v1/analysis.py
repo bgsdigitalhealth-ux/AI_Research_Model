@@ -17,9 +17,21 @@ from app.schemas.analysis import (
     VariableDefinition,
 )
 from app.services.analysis_service import AnalysisService
+from app.services.docker_r_engine import DockerREngine
 
 router = APIRouter(prefix="/analysis", tags=["Statistical Analysis & Snapshots"])
 
+
+
+@router.get(
+    "/runtime",
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve current containerized R statistical computing runtime status",
+)
+async def get_analysis_runtime(
+    current_user: User = Depends(get_current_user),
+):
+    return DockerREngine.get_runtime_versions()
 
 # =============================================================================
 # DATASET SNAPSHOTS

@@ -33,6 +33,7 @@ from app.schemas.analysis import (
 )
 from app.services.ai_statistical_explanation_service import AiStatisticalExplanationService
 from app.services.statistical_engine import StatisticalEngine, get_statistical_runtime_versions
+from app.services.docker_r_engine import DockerREngine
 
 SUPPORTED_METHODS: List[Dict[str, Any]] = [
     {
@@ -510,11 +511,11 @@ class AnalysisService:
             config=config.model_dump(mode="json", by_alias=True),
             status="running",
             progress_percent=25,
-            status_message="Executing verified statistical runtime...",
+            status_message="Executing in Docker R containerized runtime...",
             queued_at=now,
             started_at=now,
             executed_by_user_id=current_user.id,
-            runtime_versions=get_statistical_runtime_versions(),
+            runtime_versions=DockerREngine.get_runtime_versions(),
             snapshot_checksum=snapshot.checksum,
         )
         self.session.add(run)
@@ -522,7 +523,7 @@ class AnalysisService:
 
         # 3. Deterministic statistical computation
         try:
-            stats_output = StatisticalEngine.execute(
+            stats_output = DockerREngine.execute(
                 data=snapshot.dataset_payload,
                 method_id=config.method_id,
                 dependent_var=config.dependent_variable,
@@ -548,6 +549,8 @@ class AnalysisService:
             stats_output=stats_output,
             study_title=study.title,
         )
+        if isinstance(ai_exp, dict):
+            ai_exp["rCode"] = stats_output.get("r_code")
 
         end_time = time.time()
         completed_at = datetime.now(timezone.utc)
@@ -748,12 +751,17 @@ class AnalysisService:
         study_res = await self.session.execute(study_stmt)
         study_title = study_res.scalars().first()
 
+        r_code_val = None
+        if sr.ai_explanation and isinstance(sr.ai_explanation, dict):
+            r_code_val = sr.ai_explanation.get("rCode") or sr.ai_explanation.get("r_code")
+
         return StatisticalResultResponse(
             run_id=sr.run_id,
             study_id=sr.study_id,
             study_title=study_title,
             dataset_snapshot_id=sr.dataset_snapshot_id,
             method_id=sr.method_id,
+            r_code=r_code_val,
             sample_size=sr.sample_size,
             excluded_count=sr.excluded_count,
             missingness_handled=sr.missingness_handled,

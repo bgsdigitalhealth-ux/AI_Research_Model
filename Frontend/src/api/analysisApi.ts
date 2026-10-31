@@ -93,5 +93,21 @@ export const analysisApi = {
     const response = await apiClient.get<DataQualityReport>(`/analysis/datasets/${datasetId}/quality`);
     return response.data;
   },
+
+  /**
+   * Retrieves containerized Docker R runtime status and environment telemetry.
+   */
+  async getAnalysisRuntime(): Promise<{
+    engine: string;
+    docker_status: string;
+    container_image: string;
+    r_version: string;
+    r_packages: string;
+    execution_sandbox: string;
+    security_boundary: string;
+  }> {
+    const response = await apiClient.get('/analysis/runtime');
+    return response.data;
+  },
 };
 

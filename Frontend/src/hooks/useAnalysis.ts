@@ -114,3 +114,11 @@ export function useCancelAnalysisRun() {
   });
 }
 
+
+export function useAnalysisRuntime() {
+  return useQuery({
+    queryKey: ['analysis', 'runtime'],
+    queryFn: () => analysisApi.getAnalysisRuntime(),
+    staleTime: 60000,
+  });
+}
