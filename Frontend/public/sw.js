@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ai-research-flow-shell-v1';
+const CACHE_NAME = 'ai-research-flow-shell-v2';
 const SHELL_ASSETS = [
   '/',
   '/index.html',
@@ -31,15 +31,18 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: Network-first for dynamic navigation, cache fallback when offline
+// Fetch: Network-first for dynamic navigation, safe cache fallback when offline
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Skip caching API network calls; let Axios/IndexedDB handle data offline
-  if (url.pathname.startsWith('/api/')) {
+  // Skip non-http/https protocols
+  if (!url.protocol.startsWith('http')) return;
+
+  // Skip caching API network calls and cross-origin calls; let Axios/browser handle directly
+  if (url.pathname.startsWith('/api/') || url.origin !== self.location.origin) {
     return;
   }
 
@@ -51,20 +54,26 @@ self.addEventListener('fetch', (event) => {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
-          });
+          }).catch(() => {});
         }
         return networkResponse;
       })
-      .catch(() => {
+      .catch(async () => {
         // Network failed (offline); serve from cache
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          // Default fallback to index.html for SPA client routing
-          if (event.request.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
+        const cachedResponse = await caches.match(event.request);
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        // Default fallback to index.html for SPA client routing
+        if (event.request.mode === 'navigate') {
+          const fallback = await caches.match('/index.html');
+          if (fallback) return fallback;
+        }
+        // Always return a valid Response object to prevent TypeError: Failed to convert value to 'Response'
+        return new Response('Network offline and resource not cached.', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({ 'Content-Type': 'text/plain' }),
         });
       })
   );
@@ -82,4 +91,3 @@ self.addEventListener('sync', (event) => {
     );
   }
 });
-
