@@ -62,6 +62,21 @@ async def create_report(
 
 
 @reports_router.get(
+    "/new",
+    response_model=ResearchReportResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Preview synthesized report draft for analysis run",
+)
+async def preview_new_report(
+    analysis_run_id: Optional[uuid.UUID] = Query(None, alias="analysisRunId"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ReportExportService(db)
+    return await service.synthesize_draft_report(analysis_run_id, current_user)
+
+
+@reports_router.get(
     "/{report_id}",
     response_model=ResearchReportResponse,
     status_code=status.HTTP_200_OK,

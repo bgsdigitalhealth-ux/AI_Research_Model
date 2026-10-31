@@ -10,11 +10,15 @@ export function useReports(params?: { studyId?: string; type?: string; status?: 
   });
 }
 
-export function useReport(id?: string) {
+export function useReport(id?: string, analysisRunId?: string | null) {
   return useQuery({
-    queryKey: ['report', id],
+    queryKey: ['report', id, analysisRunId],
     queryFn: () => {
       if (!id) throw new Error('Report ID is required');
+      if (id === 'new') {
+        const query = analysisRunId ? `?analysisRunId=${analysisRunId}` : '';
+        return reportsApi.getReportById(`new${query}`);
+      }
       return reportsApi.getReportById(id);
     },
     enabled: Boolean(id),
