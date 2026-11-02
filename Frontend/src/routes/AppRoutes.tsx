@@ -4,6 +4,7 @@ import { LoginView } from '@/features/auth/LoginView';
 import { DashboardView } from '@/features/dashboard/DashboardView';
 import { StudiesView } from '@/features/studies/StudiesView';
 import { StudyDetailView } from '@/features/studies/StudyDetailView';
+import { StudyCreateProtocolFlowView } from '@/features/studies/StudyCreateProtocolFlowView';
 import { ProtocolsView } from '@/features/protocols/ProtocolsView';
 import { ProtocolUploadView } from '@/features/protocols/ProtocolUploadView';
 import { ProtocolDetailView } from '@/features/protocols/ProtocolDetailView';
@@ -52,6 +53,7 @@ export function AppRoutes() {
 
         {/* My Studies */}
         <Route path="studies" element={<StudiesView />} />
+        <Route path="studies/new" element={<StudyCreateProtocolFlowView />} />
         <Route path="studies/:id" element={<StudyDetailView />} />
 
         {/* Protocols (Part 2 Screens) */}

@@ -22,7 +22,7 @@ import { useAuth } from '@/hooks/useAuth';
 export const NAVIGATION_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard },
   { id: 'studies', label: 'My Studies', path: '/studies', icon: FolderKanban },
-  { id: 'protocols', label: 'Protocols', path: '/protocols', icon: FileText },
+  { id: 'protocols', label: 'Admin Protocols', path: '/protocols', icon: FileText },
   { id: 'questionnaires', label: 'Questionnaires', path: '/questionnaires', icon: ClipboardList },
   { id: 'data-collection', label: 'Data Collection', path: '/data-collection', icon: Database },
   { id: 'analysis', label: 'Analysis', path: '/analysis', icon: BarChart3 },
@@ -42,7 +42,15 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const isAdmin = user?.role === 'administrator';
+
+  const visibleNavItems = NAVIGATION_ITEMS.filter((item) => {
+    if (item.id === 'protocols') {
+      return isAdmin;
+    }
+    return true;
+  });
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -107,7 +115,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               Workspace
             </div>
             <nav className="space-y-1" aria-label="Main Navigation">
-              {NAVIGATION_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <NavLink

@@ -384,6 +384,8 @@ class StudyService:
             id=study.id,
             title=study.title,
             protocolNumber=study.protocol_number,
+            description=study.description,
+            researchAims=study.research_aims,
             status=study.status,
             phase=study.phase,
             principalInvestigator=pi_name,

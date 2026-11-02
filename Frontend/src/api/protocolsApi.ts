@@ -14,6 +14,84 @@ export interface UploadProtocolOptions {
   signal?: AbortSignal;
 }
 
+
+export interface ProtocolRagVerifyPayload {
+  study_title: string;
+  description: string;
+  protocol_type?: string;
+  protocol_text?: string;
+  file_name?: string;
+  file_size_bytes?: number;
+}
+
+export interface VerificationCheckItem {
+  section: string;
+  status: 'Matched' | 'Partially Matched' | 'Missing';
+  icon: 'check' | 'warning';
+  message: string;
+}
+
+export interface ProtocolIssueItem {
+  section: string;
+  issue: string;
+  severity: 'warning' | 'danger';
+  suggestion: string;
+}
+
+export interface TestCaseAnalysisData {
+  objective: string;
+  methodology: string;
+  study_design: string;
+  population: string;
+  endpoints: {
+    primary: string;
+    secondary: string;
+  };
+  analysis_plan: string;
+}
+
+export interface ProtocolGeneratedQuestion {
+  id: string;
+  text: string;
+  choices: Array<{ code: string; label: string; score: number }>;
+  explanation?: string;
+  remark?: string;
+}
+
+export interface ProtocolRagVerifyResponse {
+  similarity_match: {
+    percentage: number;
+    label: string;
+    matched_admin_protocol: string;
+    matched_admin_protocol_id: string;
+    disease_area?: string;
+  };
+  verification_summary: VerificationCheckItem[];
+  issues: ProtocolIssueItem[];
+  test_case_analysis: TestCaseAnalysisData;
+  generated_questions: ProtocolGeneratedQuestion[];
+}
+
+export interface CompleteStudyFlowPayload {
+  study_title: string;
+  description: string;
+  protocol_type?: string;
+  file_name?: string;
+  file_size_bytes?: number;
+  test_case_analysis?: Partial<TestCaseAnalysisData>;
+  generated_questions?: ProtocolGeneratedQuestion[];
+}
+
+export interface CompleteStudyFlowResponse {
+  success: boolean;
+  study_id: string;
+  protocol_id: string;
+  questionnaire_id?: string;
+  study_title: string;
+  protocol_number: string;
+  message: string;
+}
+
 export const protocolsApi = {
   /**
    * Retrieves list of protocols dynamically from backend.
@@ -143,5 +221,19 @@ export const protocolsApi = {
     );
     return response.data;
   },
-};
+  /**
+   * Performs semantic RAG verification against standard Admin protocols.
+   */
+  async verifyProtocolRag(payload: ProtocolRagVerifyPayload): Promise<ProtocolRagVerifyResponse> {
+    const response = await apiClient.post<ProtocolRagVerifyResponse>('/protocols/rag-verify', payload);
+    return response.data;
+  },
 
+  /**
+   * Completes multi-step study creation, protocol linkage, and question generation.
+   */
+  async completeStudyFlow(payload: CompleteStudyFlowPayload): Promise<CompleteStudyFlowResponse> {
+    const response = await apiClient.post<CompleteStudyFlowResponse>('/protocols/complete-study-flow', payload);
+    return response.data;
+  },
+};

@@ -19,6 +19,7 @@ class StudyCreateRequest(BaseSchema):
     start_date: Optional[datetime] = Field(None, alias="startDate")
     end_date: Optional[datetime] = Field(None, alias="endDate")
     irb_approval_number: Optional[str] = Field(None, alias="irbApprovalNumber")
+    research_aims: Optional[Dict[str, Any]] = Field(None, alias="researchAims")
     irb_approval_date: Optional[datetime] = Field(None, alias="irbApprovalDate")
     governance_notes: Optional[str] = Field(None, alias="governanceNotes")
 
@@ -35,6 +36,7 @@ class StudyUpdateRequest(BaseSchema):
     end_date: Optional[datetime] = Field(None, alias="endDate")
     status: Optional[str] = None
     irb_approval_number: Optional[str] = Field(None, alias="irbApprovalNumber")
+    research_aims: Optional[Dict[str, Any]] = Field(None, alias="researchAims")
     irb_approval_date: Optional[datetime] = Field(None, alias="irbApprovalDate")
     governance_approved: Optional[bool] = Field(None, alias="governanceApproved")
     consent_framework_approved: Optional[bool] = Field(None, alias="consentFrameworkApproved")
@@ -55,6 +57,7 @@ class StudyResponse(BaseSchema):
     id: uuid.UUID
     title: str
     protocol_number: str = Field(..., alias="protocolNumber")
+    description: Optional[str] = None
     status: str
     phase: Optional[str] = None
     principal_investigator: Optional[str] = Field(None, alias="principalInvestigator")
@@ -68,6 +71,7 @@ class StudyResponse(BaseSchema):
     governance_approved: bool = Field(False, alias="governanceApproved")
     consent_framework_approved: bool = Field(False, alias="consentFrameworkApproved")
     irb_approval_number: Optional[str] = Field(None, alias="irbApprovalNumber")
+    research_aims: Optional[Dict[str, Any]] = Field(None, alias="researchAims")
     created_at: datetime = Field(..., alias="createdAt")
     updated_at: datetime = Field(..., alias="updatedAt")
 
@@ -99,6 +103,7 @@ class StudyGovernanceUpdateRequest(BaseSchema):
     governance_approved: bool = Field(..., alias="governanceApproved")
     consent_framework_approved: bool = Field(..., alias="consentFrameworkApproved")
     irb_approval_number: Optional[str] = Field(None, alias="irbApprovalNumber")
+    research_aims: Optional[Dict[str, Any]] = Field(None, alias="researchAims")
     irb_approval_date: Optional[datetime] = Field(None, alias="irbApprovalDate")
     governance_notes: Optional[str] = Field(None, alias="governanceNotes")
 

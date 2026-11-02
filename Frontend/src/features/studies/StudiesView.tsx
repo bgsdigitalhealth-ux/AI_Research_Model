@@ -92,13 +92,22 @@ export function StudiesView() {
       ]}
       actions={
         <div className="flex items-center gap-2">
+          <Link to="/studies/new">
+            <Button
+              size="sm"
+              className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium shadow-xs"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add New Study</span>
+            </Button>
+          </Link>
           <Button
             size="sm"
-            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+            variant="outline"
+            className="gap-1.5 text-xs text-slate-600 hover:bg-slate-100"
             onClick={handleOpenCreateModal}
           >
-            <Plus className="h-4 w-4" />
-            <span>New Study</span>
+            <span>Quick Entry</span>
           </Button>
         </div>
       }
