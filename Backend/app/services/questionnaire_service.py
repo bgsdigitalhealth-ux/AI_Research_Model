@@ -983,6 +983,7 @@ class QuestionnaireService:
 
         pinecone_svc = get_pinecone_service()
         gen_data = None
+        ai_provider = None
         try:
             from app.services.langgraph_rag_service import get_langgraph_questionnaire_service
             langgraph_svc = get_langgraph_questionnaire_service()
@@ -1049,7 +1050,7 @@ class QuestionnaireService:
 
             ai_generation_metadata={
 
-                "provider": getattr(ai_provider, "model_name", "ai-adapter"),
+                "provider": getattr(ai_provider, "model_name", "langgraph-rag-gpt4o") if ai_provider else "langgraph-rag-gpt4o",
 
                 "instrumentType": payload.instrument_type,
 
@@ -1361,7 +1362,7 @@ class QuestionnaireService:
 
             entity_id=str(q.id),
 
-            details={"questions_generated": len(created.questions) if created else 0, "model": getattr(ai_provider, "model_name", "unknown")},
+            details={"questions_generated": len(created.questions) if created else 0, "model": getattr(ai_provider, "model_name", "langgraph-rag-gpt4o") if ai_provider else "langgraph-rag-gpt4o"},
 
         )
 
