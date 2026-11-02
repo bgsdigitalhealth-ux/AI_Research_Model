@@ -153,7 +153,7 @@ export function AnalysisResultsView() {
 
                 <div className="text-right text-xs text-slate-500">
                   <div>Run ID: <span className="font-mono text-slate-800 font-semibold">{results.runId}</span></div>
-                  <div>Generated: {new Date(results.generatedAt).toLocaleString()}</div>
+                  <div>Generated: {results.generatedAt ? new Date(results.generatedAt).toLocaleString() : '—'}</div>
                 </div>
               </div>
 
@@ -161,8 +161,8 @@ export function AnalysisResultsView() {
               <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <div className="rounded-md bg-slate-50 p-3">
                   <span className="text-[11px] font-semibold uppercase text-slate-400 block">Sample Size ($N$)</span>
-                  <span className="text-lg font-bold text-slate-900">{results.sampleSize.toLocaleString()}</span>
-                  <span className="text-[10px] text-slate-500 block">Excluded: {results.excludedCount}</span>
+                  <span className="text-lg font-bold text-slate-900">{results.sampleSize != null ? Number(results.sampleSize).toLocaleString() : '—'}</span>
+                  <span className="text-[10px] text-slate-500 block">Excluded: {results.excludedCount ?? 0}</span>
                 </div>
 
                 <div className="rounded-md bg-slate-50 p-3">

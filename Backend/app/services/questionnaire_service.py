@@ -977,25 +977,39 @@ class QuestionnaireService:
 
 
 
-        # 1. Seamless Pinecone RAG Vector Semantic Search in Backend
+        # 1. Seamless LangGraph RAG Agent StateGraph Execution in Backend
+        # Graph: Retrieve (Pinecone) -> Re-rank (Multi-criterion) -> Calibrate (FDA PRO) -> Synthesize (GPT-4o) -> Validate & Sanitize
         from app.services.pinecone_service import get_pinecone_service
+        from app.services.langgraph_rag_service import get_langgraph_questionnaire_service
+
         pinecone_svc = get_pinecone_service()
-        search_query = f"{payload.study_title or ''} {payload.research_aims or ''} {' '.join(payload.outcomes or [])}".strip()
-        exemplars = []
-        if search_query and pinecone_svc.is_configured:
-            try:
-                exemplars = await pinecone_svc.semantic_search(query=search_query, top_k=5)
-            except Exception as e:
-                logger.warning(f"Pinecone RAG backend search error: {e}")
+        gen_data = None
+        try:
+            langgraph_svc = get_langgraph_questionnaire_service()
+            gen_data = await langgraph_svc.generate(
+                study_title=payload.study_title or (study.title if study else "Clinical Assessment"),
+                research_aims=payload.research_aims or "",
+                target_population=payload.target_population,
+                outcomes=payload.outcomes,
+                instrument_type=payload.instrument_type or "PRO",
+                suggested_count=payload.suggested_question_count or 10,
+            )
+        except Exception as e:
+            logger.warning(f"LangGraph RAG pipeline error: {e}. Falling back to standard AI adapter.")
 
-        ai_provider = get_ai_provider()
-        gen_payload = payload.model_dump(by_alias=True)
-        if exemplars:
-            gen_payload["semantic_exemplars"] = exemplars
-
-        gen_data = await ai_provider.generate_questionnaire(gen_payload)
-
-
+        if not gen_data or not gen_data.get("questions"):
+            ai_provider = get_ai_provider()
+            gen_payload = payload.model_dump(by_alias=True)
+            search_query = f"{payload.study_title or ''} {payload.research_aims or ''} {' '.join(payload.outcomes or [])}".strip()
+            exemplars = []
+            if search_query and pinecone_svc.is_configured:
+                try:
+                    exemplars = await pinecone_svc.semantic_search(query=search_query, top_k=5)
+                except Exception as ex:
+                    logger.warning(f"Pinecone RAG backend search error: {ex}")
+            if exemplars:
+                gen_payload["semantic_exemplars"] = exemplars
+            gen_data = await ai_provider.generate_questionnaire(gen_payload)
 
         title = gen_data.get("title") or f"{payload.study_title} Protocol Assessment"
 
