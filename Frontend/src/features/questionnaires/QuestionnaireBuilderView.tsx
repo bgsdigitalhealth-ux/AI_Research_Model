@@ -8,6 +8,7 @@ import {
   useCreateNewVersion,
   useUploadQuestionsFile,
   useDeleteQuestionnaire,
+  useGenerateAiQuestionnaire,
 } from '@/hooks/useQuestionnaires';
 import { StatusState } from '@/components/shared/StatusState';
 import { QuestionCard } from './components/QuestionCard';
@@ -43,6 +44,7 @@ import {
   Lightbulb,
   MessageSquare,
   Sparkles,
+  FileText,
 } from 'lucide-react';
 
 export function QuestionnaireBuilderView() {
@@ -64,6 +66,8 @@ export function QuestionnaireBuilderView() {
   const updateMutation = useUpdateQuestionnaire(id || '');
   const newVersionMutation = useCreateNewVersion(id || '');
   const uploadPdfMutation = useUploadQuestionsFile();
+  const generateAiMutation = useGenerateAiQuestionnaire();
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const deleteMutation = useDeleteQuestionnaire();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -177,6 +181,61 @@ export function QuestionnaireBuilderView() {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleAiGenerateFromTopic = async () => {
+    const effectiveTitle = title.trim();
+    const effectiveDesc = description.trim();
+
+    if (!effectiveTitle && !effectiveDesc) {
+      toast({
+        title: 'Title or Description Required',
+        description: 'Please enter a questionnaire title or description above to generate questions with AI.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsGeneratingAi(true);
+      const generated = await generateAiMutation.mutateAsync({
+        studyId: remoteData?.studyId || undefined,
+        studyTitle: effectiveTitle || 'Clinical Assessment Instrument',
+        researchAims: effectiveDesc || effectiveTitle,
+        targetPopulation: 'Clinical Study Cohort',
+        outcomes: [effectiveTitle || 'Primary Assessment'],
+        suggestedQuestionCount: 5,
+      });
+
+      toast({
+        title: 'Questions Generated with AI',
+        description: `Successfully synthesized ${generated.questions.length} questions matching your topic & description.`,
+        variant: 'success',
+      });
+
+      if (isNew) {
+        navigate(`/questionnaires/${generated.id}/builder`, { replace: true });
+      } else {
+        setTitle(generated.title);
+        setDescription(generated.description || effectiveDesc);
+        setSections(generated.sections || []);
+        setQuestions(generated.questions || []);
+        if (generated.questions && generated.questions.length > 0) {
+          setSelectedQuestionId(generated.questions[0].id);
+        }
+        setIsDirty(true);
+      }
+    } catch (err: unknown) {
+      toast({
+        title: 'AI Question Generation Failed',
+        description:
+          (err as { message?: string })?.message ||
+          'Backend AI question generation endpoint is currently unavailable.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingAi(false);
     }
   };
 
@@ -628,14 +687,46 @@ export function QuestionnaireBuilderView() {
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
+                      size="sm"
+                      onClick={handleAiGenerateFromTopic}
+                      disabled={isGeneratingAi || isUploadingPdf}
+                      className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+                    >
+                      {isGeneratingAi ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 fill-current" />
+                          <span>AI Generate Questions</span>
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate('/questionnaires/generate?tab=topic_file')}
+                      disabled={isUploadingPdf || isGeneratingAi}
+                      className="text-xs gap-1 border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100"
+                    >
+                      <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                      <span>Topic + File</span>
+                    </Button>
+
+                    <Button
+                      type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploadingPdf}
-                      className="text-xs gap-1 border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100"
+                      disabled={isUploadingPdf || isGeneratingAi}
+                      className="text-xs gap-1 border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100"
                     >
-                      <FileUp className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Upload File</span>
+                      <FileUp className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Upload Questions</span>
                     </Button>
 
                     <Button
@@ -681,70 +772,127 @@ export function QuestionnaireBuilderView() {
                 )}
               </div>
 
-              {/* Genuine Empty State if no questions */}
+              {/* Genuine Empty State if no questions: 3 Distinct Generation Options */}
               {questions.length === 0 ? (
-                <div className="p-10 text-center rounded-xl border border-dashed border-slate-300 bg-white space-y-4">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <FileUp className="h-7 w-7" />
+                <div className="p-8 text-center rounded-xl border border-dashed border-slate-300 bg-white space-y-5">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                    <Sparkles className="h-6 w-6" />
                   </div>
                   <div>
-                    <h4 className="text-base font-bold text-slate-800">No Questions Added Yet</h4>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-                      Upload a PDF containing questions to automatically extract them into the template format, or add items manually using the template editor.
+                    <h4 className="text-base font-bold text-slate-900">No Questions Added Yet</h4>
+                    <p className="text-xs text-slate-500 max-w-lg mx-auto mt-1">
+                      Choose one of the 3 generation methods below to populate candidate questions into the standardized template, or add items manually.
                     </p>
                   </div>
 
-                  {/* Questionnaire Template Structure Overview */}
-                  <div className="p-3.5 max-w-lg mx-auto rounded-xl bg-slate-50 border border-slate-200 text-left text-xs space-y-1.5 text-slate-700">
-                    <p className="font-bold text-slate-900 text-xs">Questionnaire Template Specifications:</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
-                      <div className="p-2 rounded bg-white border border-slate-200">
-                        <span className="font-bold text-slate-800 block">1. Question</span>
-                        <span className="text-rose-600 font-semibold">* Mandatory</span>
-                        <p className="text-slate-500 text-[10px] mt-0.5">Problem statement or participant prompt.</p>
+                  {/* 3 Generation Options Cards */}
+                  {!isPublished && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-left pt-1">
+                      {/* Option 1: AI will generate Question - user gives topic and description */}
+                      <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 flex flex-col justify-between hover:border-blue-400 hover:shadow-xs transition-all">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-blue-600 text-white shadow-xs">
+                              <Sparkles className="h-4 w-4" />
+                            </div>
+                            <span className="font-bold text-xs text-slate-900">1. Topic &amp; Description</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
+                            AI synthesizes questions directly from the title &amp; description entered above using LangGraph RAG.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={handleAiGenerateFromTopic}
+                          disabled={isGeneratingAi || isUploadingPdf}
+                          className="mt-3.5 w-full text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                        >
+                          {isGeneratingAi ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Synthesizing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-3.5 w-3.5" />
+                              <span>Generate from Topic</span>
+                            </>
+                          )}
+                        </Button>
                       </div>
-                      <div className="p-2 rounded bg-white border border-slate-200">
-                        <span className="font-bold text-slate-800 block">2. Options</span>
-                        <span className="text-rose-600 font-semibold">* Mandatory</span>
-                        <p className="text-slate-500 text-[10px] mt-0.5">Single-choice radio buttons.</p>
+
+                      {/* Option 2: User gives topic, description and PDF/image reference */}
+                      <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 flex flex-col justify-between hover:border-indigo-400 hover:shadow-xs transition-all">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-indigo-600 text-white shadow-xs">
+                              <FileText className="h-4 w-4" />
+                            </div>
+                            <span className="font-bold text-xs text-slate-900">2. Topic + PDF / Image</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
+                            Provide your topic &amp; description plus an uploaded protocol PDF or diagram image to ground questions.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate('/questionnaires/generate?tab=topic_file')}
+                          disabled={isGeneratingAi || isUploadingPdf}
+                          className="mt-3.5 w-full text-xs gap-1.5 border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          <span>Topic + Context File</span>
+                        </Button>
                       </div>
-                      <div className="p-2 rounded bg-white border border-slate-200">
-                        <span className="font-bold text-slate-800 block">3. Remark</span>
-                        <span className="text-amber-700 font-medium">Optional</span>
-                        <p className="text-slate-500 text-[10px] mt-0.5">Participant notes, justification, or observations.</p>
+
+                      {/* Option 3: User gives question in PDF/image format to extract */}
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 flex flex-col justify-between hover:border-emerald-400 hover:shadow-xs transition-all">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-emerald-600 text-white shadow-xs">
+                              <FileUp className="h-4 w-4" />
+                            </div>
+                            <span className="font-bold text-xs text-slate-900">3. Questions PDF / Image</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
+                            Upload an existing exam sheet, questionnaire, or question bank in PDF or Image format to extract into template.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isUploadingPdf || isGeneratingAi}
+                          className="mt-3.5 w-full text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-semibold"
+                        >
+                          {isUploadingPdf ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Extracting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileUp className="h-3.5 w-3.5" />
+                              <span>Upload Questions File</span>
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </div>
-                  </div>
+                  )}
 
+                  {/* Manual addition fallback */}
                   {!isPublished && (
-                    <div className="flex items-center justify-center gap-3 pt-2">
+                    <div className="pt-2 flex items-center justify-center gap-3">
                       <Button
                         size="sm"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploadingPdf}
-                        className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
-                      >
-                        {isUploadingPdf ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>Extracting with AI...</span>
-                          </>
-                        ) : (
-                          <>
-                            <FileUp className="h-4 w-4" />
-                            <span>Upload Questions (PDF, Image, Excel)</span>
-                          </>
-                        )}
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => handleAddQuestion('single_choice')}
-                        className="gap-1.5"
+                        className="text-xs gap-1.5 text-slate-600 hover:text-slate-900"
                       >
-                        <Plus className="h-4 w-4" />
-                        <span>Add Single Choice Question</span>
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Or add single choice item manually</span>
                       </Button>
                     </div>
                   )}

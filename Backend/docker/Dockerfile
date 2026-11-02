@@ -26,3 +26,4 @@ RUN useradd -m -u 1000 ruser && chown -R ruser:ruser /scripts
 USER ruser
 
 ENTRYPOINT ["Rscript", "/scripts/run_analysis.R"]
+

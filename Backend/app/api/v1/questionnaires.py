@@ -181,6 +181,8 @@ async def upload_questions_file(
 
     title: Optional[str] = Form(None, description="Optional questionnaire title"),
 
+    description: Optional[str] = Form(None, description="Optional topic description or specific aims"),
+
     current_user: User = Depends(get_current_user),
 
     db: AsyncSession = Depends(get_db),
@@ -202,6 +204,8 @@ async def upload_questions_file(
         study_id=studyId,
 
         title=title,
+
+        description=description,
 
     )
 

@@ -2251,6 +2251,8 @@ class QuestionnaireService:
 
         title: Optional[str] = None,
 
+        description: Optional[str] = None,
+
     ) -> QuestionnaireResponse:
 
         from app.services.document_parser import DocumentParserService
@@ -2271,7 +2273,9 @@ class QuestionnaireService:
 
             image_uri = DocumentParserService.get_image_data_uri(file_bytes, filename)
 
-            gen_data = await ai_provider.extract_questionnaire_from_image(image_uri, filename)
+            gen_data = await ai_provider.extract_questionnaire_from_image(
+                image_uri, filename, topic=title, description=description
+            )
 
         else:
 
@@ -2281,7 +2285,9 @@ class QuestionnaireService:
 
                 raise FileValidationError(f"Could not extract readable text or questions from '{filename}'.")
 
-            gen_data = await ai_provider.extract_questionnaire_from_document(full_text, filename)
+            gen_data = await ai_provider.extract_questionnaire_from_document(
+                full_text, filename, topic=title, description=description
+            )
 
 
 
@@ -2343,7 +2349,8 @@ class QuestionnaireService:
 
         doc_title = title or gen_data.get("title") or filename.rsplit(".", 1)[0]
 
-        description = gen_data.get("description") or f"Questions extracted from {filename}."
+        doc_desc = description or gen_data.get("description") or f"Questions extracted from {filename}."
+        description = doc_desc
 
 
 

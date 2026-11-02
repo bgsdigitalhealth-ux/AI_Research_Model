@@ -130,7 +130,7 @@ export interface AiGenerateQuestionnairePayload {
   protocolId?: string;
   studyId?: string;
   researchAims: string;
-  targetPopulation: string;
+  targetPopulation?: string;
   outcomes: string[];
   instrumentType?: 'PRO' | 'ClinicianAdministered' | 'Screener' | 'Diagnostic';
   suggestedQuestionCount?: number;

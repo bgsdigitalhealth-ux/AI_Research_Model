@@ -117,6 +117,8 @@ class BaseAIProvider(abc.ABC):
         self,
         full_text: str,
         filename: Optional[str] = None,
+        topic: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Parses questions from an uploaded document (PDF/DOCX/Excel/CSV) into the questionnaire template:
@@ -132,6 +134,8 @@ class BaseAIProvider(abc.ABC):
         self,
         image_data_uri: str,
         filename: Optional[str] = None,
+        topic: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Parses questions from an uploaded image (PNG, JPG, etc.) using AI vision capabilities
@@ -164,6 +168,8 @@ class UnconfiguredAIProvider(BaseAIProvider):
         self,
         full_text: str,
         filename: Optional[str] = None,
+        topic: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         raise AIProviderNotConfiguredError(
             "AI provider is not configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
@@ -173,6 +179,8 @@ class UnconfiguredAIProvider(BaseAIProvider):
         self,
         image_data_uri: str,
         filename: Optional[str] = None,
+        topic: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         raise AIProviderNotConfiguredError(
             "AI provider is not configured. Please set OPENAI_API_KEY or GEMINI_API_KEY."
@@ -422,6 +430,8 @@ Output JSON only.
         self,
         full_text: str,
         filename: Optional[str] = None,
+        topic: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         if settings.AI_STRIP_PARTICIPANT_IDENTIFIERS:
             full_text = strip_participant_identifiers(full_text)
@@ -774,7 +784,13 @@ Output JSON only.
             "}"
         )
 
-        prompt = f"Uploaded File: {filename or 'Questionnaire_Document.pdf'}\n\nDocument Text Content:\n{doc_sample}"
+        context_parts = []
+        if topic:
+            context_parts.append(f"Target Assessment Topic: {topic}")
+        if description:
+            context_parts.append(f"Target Description & Specific Objectives:\n{description}")
+        context_str = "\n\n".join(context_parts) + "\n\n" if context_parts else ""
+        prompt = f"{context_str}Uploaded File: {filename or 'Questionnaire_Document.pdf'}\n\nDocument Text Content:\n{doc_sample}"
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -810,6 +826,8 @@ Output JSON only.
         self,
         image_data_uri: str,
         filename: Optional[str] = None,
+        topic: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         system_instruction = (
             "You are an expert psychometrician and visual assessment document parser. "
@@ -874,7 +892,12 @@ Output JSON only.
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Please parse and extract all questions from this image document ({filename or 'questions.png'}).",
+                            "text": (
+                                f"Target Assessment Topic: {topic}\nTarget Description & Objectives: {description}\n\n"
+                                f"Analyze this image in conjunction with the topic and description above, and generate/extract structured questions in the standardized template format ({filename or 'questions.png'})."
+                                if (topic or description) else
+                                f"Please parse and extract all questions from this image document ({filename or 'questions.png'})."
+                            ),
                         },
                         {
                             "type": "image_url",
