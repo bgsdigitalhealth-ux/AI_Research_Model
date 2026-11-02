@@ -291,6 +291,18 @@ class GeminiAIProvider(BaseAIProvider):
             "'mappings': list of objects [{'objectiveId': str, 'objectiveTitle': str, 'outcomeName': str, 'coveredQuestionIds': list[str], 'isCovered': bool}]."
         )
 
+        semantic_exemplars = payload.get("semantic_exemplars") or []
+        exemplars_text = ""
+        if semantic_exemplars:
+            exemplars_text = "\nSemantically Retrieved Validated Exemplars from Pinecone Vector Database:\n"
+            for i, ex in enumerate(semantic_exemplars[:5], 1):
+                exemplars_text += f"{i}. [{ex.get('domain', 'Clinical')}] {ex.get('text')}\n"
+                if ex.get('choices'):
+                    labels = [c.get('label') for c in ex.get('choices', [])]
+                    exemplars_text += f"   Choices: {', '.join(labels)}\n"
+                if ex.get('explanation'):
+                    exemplars_text += f"   Rationale: {ex.get('explanation')}\n"
+
         prompt = f"""
 Study Title: {study_title}
 Research Aims: {research_aims}
@@ -298,6 +310,7 @@ Target Population: {target_pop}
 Target Outcomes: {json.dumps(outcomes)}
 Instrument Type: {instrument_type}
 Target Question Count: {count}
+{exemplars_text}
 
 Generate a complete questionnaire draft adhering strictly to this schema. Output JSON only.
 """

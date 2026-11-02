@@ -218,9 +218,6 @@ export function AnalysisResultsView() {
                   <TrendingUp className="h-4 w-4 text-blue-600" />
                   <span>Statistical Distribution &amp; Model Visualization</span>
                 </h3>
-                <span className="text-xs text-slate-500 font-mono">
-                  Engine: Docker Containerized R (GCP Validated)
-                </span>
               </div>
 
               {/* Dynamic 2-column graph layout displaying both Distribution and Regression/Scatter charts */}

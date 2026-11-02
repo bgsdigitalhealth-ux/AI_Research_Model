@@ -977,9 +977,23 @@ class QuestionnaireService:
 
 
 
-        ai_provider = get_ai_provider()
+        # 1. Seamless Pinecone RAG Vector Semantic Search in Backend
+        from app.services.pinecone_service import get_pinecone_service
+        pinecone_svc = get_pinecone_service()
+        search_query = f"{payload.study_title or ''} {payload.research_aims or ''} {' '.join(payload.outcomes or [])}".strip()
+        exemplars = []
+        if search_query and pinecone_svc.is_configured:
+            try:
+                exemplars = await pinecone_svc.semantic_search(query=search_query, top_k=5)
+            except Exception as e:
+                logger.warning(f"Pinecone RAG backend search error: {e}")
 
-        gen_data = await ai_provider.generate_questionnaire(payload.model_dump(by_alias=True))
+        ai_provider = get_ai_provider()
+        gen_payload = payload.model_dump(by_alias=True)
+        if exemplars:
+            gen_payload["semantic_exemplars"] = exemplars
+
+        gen_data = await ai_provider.generate_questionnaire(gen_payload)
 
 
 
@@ -1287,7 +1301,25 @@ class QuestionnaireService:
 
         created = await self.questionnaire_repo.get_questionnaire_by_id(q.id)
 
-
+        # 2. Asynchronously index newly created questions into Pinecone vector index
+        try:
+            if created and created.questions and pinecone_svc.is_configured:
+                vectors_to_upsert = [
+                    {
+                        "id": f"db_q_{q_item.id}",
+                        "text": q_item.text,
+                        "domain": f"Generated - {q.title}",
+                        "variableName": q_item.variable_name,
+                        "type": q_item.type,
+                        "explanation": q_item.explanation,
+                        "remark": q_item.remark,
+                        "choices": q_item.choices,
+                    }
+                    for q_item in created.questions
+                ]
+                await pinecone_svc.upsert_questions(vectors_to_upsert)
+        except Exception as e:
+            logger.warning(f"Failed to upsert new questions into Pinecone: {e}")
 
         await self.audit_repo.log_event(
 

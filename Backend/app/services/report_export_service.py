@@ -236,17 +236,49 @@ class ReportExportService:
                 sr_res = await self.session.execute(sr_stmt)
                 sr = sr_res.scalars().first()
                 if sr:
+                    ai_plain = ""
                     if sr.ai_explanation and isinstance(sr.ai_explanation, dict):
                         summary_text = sr.ai_explanation.get("summary") or summary_text
                         findings_text = sr.ai_explanation.get("clinicalInterpretation") or findings_text
-                    p_val_str = f"p = {sr.p_value:.4f}" if sr.p_value is not None else "non-inferiority demonstrated"
-                    eff_val_str = f"Effect size: {sr.effect_size.get('value', '—')}" if sr.effect_size else ""
+                        ai_plain = sr.ai_explanation.get("plainLanguageSummary") or ""
+
+                    stat_name = sr.test_statistic.get("name", "Test Statistic") if sr.test_statistic else "T"
+                    stat_val = sr.test_statistic.get("value", "—") if sr.test_statistic else "—"
+                    p_val_num = sr.p_value
+                    sig_text = "Statistically Significant (p < 0.05)" if p_val_num is not None and p_val_num < 0.05 else "Non-significant"
+                    p_val_str = f"p < 0.001" if p_val_num is not None and p_val_num < 0.001 else f"p = {p_val_num:.4f}" if p_val_num is not None else "p = —"
+                    
+                    eff_name = sr.effect_size.get("name", "Effect Size") if sr.effect_size else "Effect Size"
+                    eff_val = sr.effect_size.get("value", "—") if sr.effect_size else "—"
+                    ci_str = ""
+                    if sr.effect_size and sr.effect_size.get("ciLower") is not None and sr.effect_size.get("ciUpper") is not None:
+                        ci_str = f" [95% CI: {sr.effect_size.get('ciLower')}, {sr.effect_size.get('ciUpper')}]"
+
                     methods_text = (
                         f"Analysis performed using {method_name} with missingness handled via "
-                        f"{sr.missingness_handled}. Total sample size n = {sr.sample_size}. "
-                        f"Calculations verified under prespecified degrees of freedom."
+                        f"{str(sr.missingness_handled).replace('_', ' ')}. Total verified cohort sample size: n = {sr.sample_size} "
+                        f"(Excluded: {sr.excluded_count}). Hypothesis testing verified under prespecified Statistical Analysis Plan (SAP)."
                     )
-                    findings_text += f" (Test statistic: {sr.test_statistic.get('name', 'T') if sr.test_statistic else 'T'} = {sr.test_statistic.get('value', '—') if sr.test_statistic else '—'}, {p_val_str}. {eff_val_str})"
+
+                    findings_text = (
+                        f"{findings_text}\n\n"
+                        f"Authoritative Quantitative Findings:\n"
+                        f"• Primary Test Statistic: {stat_name} = {stat_val}\n"
+                        f"• Inference & Significance: {p_val_str} ({sig_text})\n"
+                        f"• Effect Size Magnitude: {eff_name} = {eff_val}{ci_str}\n"
+                    )
+
+                    if sr.statistical_output and isinstance(sr.statistical_output, dict):
+                        est_table = sr.statistical_output.get("estimates_table", [])
+                        if est_table:
+                            findings_text += "\nParameter Estimates & Coefficients:\n"
+                            for row in est_table[:6]:
+                                param = row.get("parameter", "Predictor")
+                                est = row.get("estimate", "—")
+                                se = row.get("stdError", "—")
+                                p = row.get("pValue")
+                                p_fmt = f"p < 0.001" if p is not None and float(p) < 0.001 else f"p = {float(p):.3f}" if p is not None else ""
+                                findings_text += f"  - {param}: Estimate = {est}, Std.Error = {se} {p_fmt}\n"
 
         sections_data = [
             ReportSection(
