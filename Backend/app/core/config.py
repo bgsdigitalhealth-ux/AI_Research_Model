@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     AI_DATA_TRANSMISSION_POLICY_APPROVED: bool = True
     AI_STRIP_PARTICIPANT_IDENTIFIERS: bool = True
 
+    # Pinecone Vector Database Configuration (Semantic Search & Question Generation)
+    PINECONE_API_KEY: Optional[str] = None
+    PINECONE_INDEX_NAME: str = "ai-research-questions"
+    PINECONE_HOST: Optional[str] = None
+
     # Email / Notification Mock or SMTP configuration
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587

@@ -4,6 +4,7 @@ import { ApiErrorDetail } from '@/lib/axios';
 import {
   Questionnaire,
   AiGenerateQuestionnairePayload,
+  GenerateFromRequirementsPayload,
 } from '@/types/questionnaire';
 
 export const QUESTIONNAIRE_KEYS = {
@@ -191,6 +192,25 @@ export function useUploadQuestionsFile() {
 
   return useMutation({
     mutationFn: (formData: FormData) => questionnairesApi.uploadQuestionsFile(formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUESTIONNAIRE_KEYS.all });
+    },
+  });
+}
+
+export function useSemanticSearchQuestions() {
+  return useMutation({
+    mutationFn: ({ query, topK, domain }: { query: string; topK?: number; domain?: string }) =>
+      questionnairesApi.semanticSearchQuestions(query, topK, domain),
+  });
+}
+
+export function useGenerateFromRequirements() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: GenerateFromRequirementsPayload) =>
+      questionnairesApi.generateFromRequirements(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUESTIONNAIRE_KEYS.all });
     },

@@ -154,3 +154,30 @@ export interface QuestionnaireMetrics {
   averageCompletionRate: number;
   recentQuestionnaires: QuestionnaireMetricItem[];
 }
+
+export interface SemanticQuestionMatch {
+  id: string;
+  score: number;
+  text: string;
+  domain: string;
+  variableName: string;
+  type: string;
+  choices: ChoiceOption[];
+  explanation?: string;
+  remark?: string;
+}
+
+export interface SemanticSearchResponse {
+  matches: SemanticQuestionMatch[];
+  total: number;
+  query: string;
+}
+
+export interface GenerateFromRequirementsPayload {
+  requirements: string;
+  studyId?: string;
+  studyTitle?: string;
+  targetPopulation?: string;
+  instrumentType?: 'PRO' | 'ClinicianAdministered' | 'Screener' | 'Diagnostic';
+  questionCount?: number;
+}

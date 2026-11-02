@@ -92,6 +92,27 @@ class BaseAIProvider(abc.ABC):
         pass
 
     @abc.abstractmethod
+    async def generate_questionnaire_from_requirements(
+        self,
+        payload: Dict[str, Any],
+        semantic_exemplars: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Synthesizes a candidate questionnaire tailored to user requirements,
+        augmented with semantically retrieved exemplars from Pinecone vector search.
+        """
+        pass
+
+    @abc.abstractmethod
+    async def generate_questionnaire_from_requirements(
+        self,
+        payload: Dict[str, Any],
+        semantic_exemplars: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        raise AIProviderNotConfiguredError(
+            "AI generation provider is not configured. Set OPENAI_API_KEY in the backend configuration."
+        )
+
     async def extract_questionnaire_from_document(
         self,
         full_text: str,
@@ -303,6 +324,87 @@ Generate a complete questionnaire draft adhering strictly to this schema. Output
                 raise
             raise AIExecutionError(f"Gemini questionnaire generation failed: {str(exc)}") from exc
 
+    async def generate_questionnaire_from_requirements(
+        self,
+        payload: Dict[str, Any],
+        semantic_exemplars: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        requirements = payload.get("requirements", "")
+        study_title = payload.get("studyTitle", "")
+        target_pop = payload.get("targetPopulation", "Clinical Research Participants")
+        instrument_type = payload.get("instrumentType", "PRO")
+        count = payload.get("questionCount", 5)
+
+        system_instruction = (
+            "You are a clinical psychometrician and questionnaire architect. "
+            "Synthesize a scientifically sound candidate questionnaire strictly tailored to the researcher's requirements. "
+            "Output JSON with 'title', 'description', 'sections', 'questions', and 'mappings'. "
+            "CRITICAL QUESTION RULES: "
+            "1. NO SUBDESCRIPTION: Set 'description': null for EVERY question. Never generate subtitles, participant guidance, or subdescriptions on individual question items. "
+            "2. RADIO BUTTON SINGLE CHOICE IN a, b, c FORMAT: All evaluation questions must use 'type': 'single_choice'. "
+            "The 'choices' array must provide options in a, b, c format with 'code': 'a', 'b', 'c', 'd', ... and 'label': 'a) ...', 'b) ...', 'c) ...', 'd) ...'. "
+            "3. QUESTION TEMPLATE FIELDS: Each question must include 'text' (mandatory), 'choices' (mandatory), "
+            "'explanation' (optional clinical rationale or null), and 'remark' (optional research remark or null). "
+            "Each question must include: 'id' (short hex), 'variableName', 'type': 'single_choice', 'text', 'description': null, 'explanation': null or str, 'remark': null or str, "
+            "'sectionId', 'order', 'validation': {'required': true}, 'choices': [{'code': 'a', 'label': 'a) ...', 'score': 1.0}, {'code': 'b', 'label': 'b) ...', 'score': 2.0}, ...], "
+            "'targetObjectiveId', 'targetOutcomeName'. "
+            "'mappings': list of objects [{'objectiveId': str, 'objectiveTitle': str, 'outcomeName': str, 'coveredQuestionIds': list[str], 'isCovered': bool}]."
+        )
+
+        exemplars_text = ""
+        if semantic_exemplars:
+            exemplars_text = "Semantically Retrieved Validated Exemplars from Pinecone Vector Database:\n"
+            for i, ex in enumerate(semantic_exemplars[:5], 1):
+                exemplars_text += f"{i}. [{ex.get('domain', 'Clinical')}] {ex.get('text')}\n"
+                if ex.get('choices'):
+                    labels = [c.get('label') for c in ex.get('choices', [])]
+                    exemplars_text += f"   Choices: {', '.join(labels)}\n"
+                if ex.get('explanation'):
+                    exemplars_text += f"   Rationale: {ex.get('explanation')}\n"
+
+        prompt = f"""
+User Research Requirements:
+{requirements}
+
+Study Title / Clinical Area: {study_title or "Target Clinical Investigation"}
+Target Research Population: {target_pop}
+Instrument Type: {instrument_type}
+Target Question Count: {count}
+
+{exemplars_text}
+
+Generate a complete questionnaire draft with exactly {count} candidate questions tailored to the user requirements above.
+Follow all standard template rules (single_choice, choices in a, b, c, d format, explanation, remark).
+Output JSON only.
+"""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        req_body = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=req_body)
+                if resp.status_code != 200:
+                    raise AIExecutionError(f"OpenAI API returned HTTP {resp.status_code}: {resp.text}")
+                data = resp.json()
+
+            raw_text = data["choices"][0]["message"]["content"]
+            return json.loads(raw_text)
+        except Exception as exc:
+            if isinstance(exc, (AIExecutionError, AIProviderNotConfiguredError)):
+                raise
+            raise AIExecutionError(f"OpenAI requirement-based questionnaire generation failed: {str(exc)}") from exc
+
     async def extract_questionnaire_from_document(
         self,
         full_text: str,
@@ -506,6 +608,87 @@ Generate a complete questionnaire draft adhering strictly to this schema. Output
             if isinstance(exc, (AIExecutionError, AIProviderNotConfiguredError)):
                 raise
             raise AIExecutionError(f"OpenAI questionnaire generation failed: {str(exc)}") from exc
+
+    async def generate_questionnaire_from_requirements(
+        self,
+        payload: Dict[str, Any],
+        semantic_exemplars: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        requirements = payload.get("requirements", "")
+        study_title = payload.get("studyTitle", "")
+        target_pop = payload.get("targetPopulation", "Clinical Research Participants")
+        instrument_type = payload.get("instrumentType", "PRO")
+        count = payload.get("questionCount", 5)
+
+        system_instruction = (
+            "You are a clinical psychometrician and questionnaire architect. "
+            "Synthesize a scientifically sound candidate questionnaire strictly tailored to the researcher's requirements. "
+            "Output JSON with 'title', 'description', 'sections', 'questions', and 'mappings'. "
+            "CRITICAL QUESTION RULES: "
+            "1. NO SUBDESCRIPTION: Set 'description': null for EVERY question. Never generate subtitles, participant guidance, or subdescriptions on individual question items. "
+            "2. RADIO BUTTON SINGLE CHOICE IN a, b, c FORMAT: All evaluation questions must use 'type': 'single_choice'. "
+            "The 'choices' array must provide options in a, b, c format with 'code': 'a', 'b', 'c', 'd', ... and 'label': 'a) ...', 'b) ...', 'c) ...', 'd) ...'. "
+            "3. QUESTION TEMPLATE FIELDS: Each question must include 'text' (mandatory), 'choices' (mandatory), "
+            "'explanation' (optional clinical rationale or null), and 'remark' (optional research remark or null). "
+            "Each question must include: 'id' (short hex), 'variableName', 'type': 'single_choice', 'text', 'description': null, 'explanation': null or str, 'remark': null or str, "
+            "'sectionId', 'order', 'validation': {'required': true}, 'choices': [{'code': 'a', 'label': 'a) ...', 'score': 1.0}, {'code': 'b', 'label': 'b) ...', 'score': 2.0}, ...], "
+            "'targetObjectiveId', 'targetOutcomeName'. "
+            "'mappings': list of objects [{'objectiveId': str, 'objectiveTitle': str, 'outcomeName': str, 'coveredQuestionIds': list[str], 'isCovered': bool}]."
+        )
+
+        exemplars_text = ""
+        if semantic_exemplars:
+            exemplars_text = "Semantically Retrieved Validated Exemplars from Pinecone Vector Database:\n"
+            for i, ex in enumerate(semantic_exemplars[:5], 1):
+                exemplars_text += f"{i}. [{ex.get('domain', 'Clinical')}] {ex.get('text')}\n"
+                if ex.get('choices'):
+                    labels = [c.get('label') for c in ex.get('choices', [])]
+                    exemplars_text += f"   Choices: {', '.join(labels)}\n"
+                if ex.get('explanation'):
+                    exemplars_text += f"   Rationale: {ex.get('explanation')}\n"
+
+        prompt = f"""
+User Research Requirements:
+{requirements}
+
+Study Title / Clinical Area: {study_title or "Target Clinical Investigation"}
+Target Research Population: {target_pop}
+Instrument Type: {instrument_type}
+Target Question Count: {count}
+
+{exemplars_text}
+
+Generate a complete questionnaire draft with exactly {count} candidate questions tailored to the user requirements above.
+Follow all standard template rules (single_choice, choices in a, b, c, d format, explanation, remark).
+Output JSON only.
+"""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        req_body = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=req_body)
+                if resp.status_code != 200:
+                    raise AIExecutionError(f"OpenAI API returned HTTP {resp.status_code}: {resp.text}")
+                data = resp.json()
+
+            raw_text = data["choices"][0]["message"]["content"]
+            return json.loads(raw_text)
+        except Exception as exc:
+            if isinstance(exc, (AIExecutionError, AIProviderNotConfiguredError)):
+                raise
+            raise AIExecutionError(f"OpenAI requirement-based questionnaire generation failed: {str(exc)}") from exc
 
     async def extract_questionnaire_from_document(
         self,

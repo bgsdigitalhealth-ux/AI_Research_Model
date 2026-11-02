@@ -45,6 +45,11 @@ from app.repositories.questionnaire_repository import QuestionnaireRepository
 from app.repositories.study_repository import StudyMembershipRepository, StudyRepository
 
 from app.schemas.questionnaire import (
+    GenerateFromRequirementsPayload,
+    SemanticSearchQuestionRequest,
+    SemanticSearchQuestionResponse,
+    SemanticQuestionMatch,
+    ChoiceOptionSchema,
 
     AiGenerateQuestionnairePayload,
 
@@ -1305,6 +1310,278 @@ class QuestionnaireService:
         return self.serialize_questionnaire(created)
 
 
+
+
+    async def semantic_search_questions(
+        self,
+        query: str,
+        top_k: int = 5,
+        domain: Optional[str] = None,
+    ) -> SemanticSearchQuestionResponse:
+        """
+        Queries Pinecone vector database using OpenAI embeddings to retrieve semantically matching questions.
+        """
+        from app.services.pinecone_service import get_pinecone_service
+        pinecone_svc = get_pinecone_service()
+        await pinecone_svc.ensure_index_seeded()
+
+        matches = await pinecone_svc.semantic_search(query=query, top_k=top_k, domain_filter=domain)
+        
+        parsed_matches = []
+        for m in matches:
+            raw_choices = m.get("choices", [])
+            valid_choices = []
+            for c in raw_choices:
+                if isinstance(c, dict):
+                    valid_choices.append(ChoiceOptionSchema(
+                        id=c.get("id", uuid.uuid4().hex[:8]),
+                        code=c.get("code", "a"),
+                        label=c.get("label", ""),
+                        score=c.get("score"),
+                    ))
+            parsed_matches.append(SemanticQuestionMatch(
+                id=m["id"],
+                score=float(m.get("score", 0.0)),
+                text=m.get("text", ""),
+                domain=m.get("domain", "Clinical Research"),
+                variableName=m.get("variableName", "var_metric"),
+                type=m.get("type", "single_choice"),
+                choices=valid_choices,
+                explanation=m.get("explanation"),
+                remark=m.get("remark"),
+            ))
+
+        return SemanticSearchQuestionResponse(
+            matches=parsed_matches,
+            total=len(parsed_matches),
+            query=query,
+        )
+
+    async def generate_from_requirements(
+        self,
+        payload: GenerateFromRequirementsPayload,
+        current_user: User,
+    ) -> QuestionnaireResponse:
+        """
+        Synthesizes candidate questionnaire based on user requirements using Pinecone vector semantic search.
+        """
+        from sqlalchemy import select, func
+        from app.services.pinecone_service import get_pinecone_service
+        from app.models.questionnaire import Questionnaire
+        from app.models.questionnaire_section import QuestionnaireSection
+        from app.models.question_item import QuestionItemModel
+        from app.models.questionnaire_mapping import QuestionnaireMapping
+
+        pinecone_svc = get_pinecone_service()
+        await pinecone_svc.ensure_index_seeded()
+
+        # 1. Semantic search in Pinecone to find grounded clinical question exemplars
+        semantic_exemplars = await pinecone_svc.semantic_search(
+            query=payload.requirements,
+            top_k=5,
+        )
+
+        # 2. Determine target study dynamically
+        study: Optional[Study] = None
+        study_id = payload.study_id
+
+        if study_id:
+            study = await self._verify_study_permission(study_id, current_user, Permission.QUESTIONNAIRE_BUILD)
+        else:
+            if payload.study_title:
+                stmt = select(Study).where(func.lower(Study.title) == payload.study_title.strip().lower())
+                res = await self.session.execute(stmt)
+                study = res.scalars().first()
+
+            if not study:
+                accessible = await self._get_accessible_study_ids(current_user)
+                if accessible and len(accessible) > 0:
+                    study = await self.study_repo.get_study_by_id(accessible[0])
+                else:
+                    stmt = select(Study).order_by(Study.created_at.desc()).limit(1)
+                    res = await self.session.execute(stmt)
+                    study = res.scalars().first()
+
+            if not study:
+                hex_id = uuid.uuid4().hex[:6].upper()
+                protocol_num = f"AI-PINECONE-{hex_id}"
+                study = Study(
+                    title=payload.study_title or f"Study: {payload.requirements[:40]}...",
+                    protocol_number=protocol_num,
+                    status="draft",
+                    created_by_user_id=current_user.id,
+                    principal_investigator_id=current_user.id,
+                    target_participants=100,
+                )
+                self.session.add(study)
+                await self.session.flush()
+
+        # 3. Call AI provider with requirements & semantic exemplars
+        ai_provider = get_ai_provider()
+        gen_data = await ai_provider.generate_questionnaire_from_requirements(
+            payload.model_dump(by_alias=True),
+            semantic_exemplars=semantic_exemplars,
+        )
+
+        title = gen_data.get("title") or (payload.study_title or f"Requirements Assessment: {payload.requirements[:45]}")
+        description = gen_data.get("description") or f"Synthesized using Pinecone vector semantic search for requirements: {payload.requirements}"
+
+        q = Questionnaire(
+            study_id=study.id,
+            title=title,
+            description=description,
+            version="1.0",
+            version_number=1,
+            status="draft",
+            is_ai_generated=True,
+            ai_generation_metadata={
+                "provider": getattr(ai_provider, "model_name", "ai-adapter"),
+                "generation_mode": "pinecone_semantic_search",
+                "requirements": payload.requirements,
+                "instrumentType": payload.instrument_type,
+                "targetPopulation": payload.target_population,
+                "exemplars_retrieved": len(semantic_exemplars),
+            },
+            scientific_validation_claim="Candidate instrument generated with Pinecone vector semantic search. Requires researcher review.",
+            is_published_immutable=False,
+            created_by_user_id=current_user.id,
+        )
+        self.session.add(q)
+        await self.session.flush()
+
+        # 4. Add Sections
+        section_ids_map: Dict[str, str] = {}
+        for idx, sec in enumerate(gen_data.get("sections", [])):
+            client_sec_id = sec.get("id") or f"sec_{idx + 1}"
+            db_sec_id = f"{q.id.hex[:8]}_{client_sec_id}"
+            section_ids_map[client_sec_id] = db_sec_id
+            db_sec = QuestionnaireSection(
+                id=db_sec_id,
+                questionnaire_id=q.id,
+                title=sec.get("title", f"Section {idx + 1}"),
+                description=sec.get("description"),
+                order=sec.get("order", idx),
+            )
+            self.session.add(db_sec)
+        await self.session.flush()
+
+        # 5. Add Questions
+        question_ids_map: Dict[str, str] = {}
+        created_questions_list = []
+        for idx, item in enumerate(gen_data.get("questions", [])):
+            client_q_id = item.get("id") or f"q_{idx + 1}"
+            db_q_id = f"{q.id.hex[:8]}_{client_q_id}"
+            question_ids_map[client_q_id] = db_q_id
+
+            sec_ref = item.get("sectionId")
+            target_sec = section_ids_map.get(sec_ref) if sec_ref else None
+
+            q_type = item.get("type", "single_choice")
+            if q_type in ("likert_5", "rating_5"):
+                q_type = "single_choice"
+
+            raw_choices = item.get("choices") or []
+            if not raw_choices and q_type == "single_choice":
+                raw_choices = [
+                    {"code": "a", "label": "a) Strongly Disagree", "score": 1.0},
+                    {"code": "b", "label": "b) Disagree", "score": 2.0},
+                    {"code": "c", "label": "c) Neutral", "score": 3.0},
+                    {"code": "d", "label": "d) Agree", "score": 4.0},
+                ]
+            elif raw_choices and isinstance(raw_choices, list):
+                formatted_choices = []
+                for c_idx, ch in enumerate(raw_choices):
+                    letter = chr(97 + c_idx)
+                    lbl = ch.get("label", "")
+                    if not lbl.lower().startswith(f"{letter})"):
+                        clean_lbl = re.sub(r"^[0-9a-zA-Z][\.\)\-]\s*", "", lbl)
+                        lbl = f"{letter}) {clean_lbl}"
+                    formatted_choices.append({
+                        "id": ch.get("id") or f"c_{c_idx + 1}",
+                        "code": letter,
+                        "label": lbl,
+                        "score": ch.get("score", float(c_idx + 1)),
+                    })
+                raw_choices = formatted_choices
+
+            db_q = QuestionItemModel(
+                id=db_q_id,
+                questionnaire_id=q.id,
+                section_id=target_sec,
+                variable_name=item.get("variableName", f"VAR_{idx + 1}").strip(),
+                type=q_type,
+                text=item.get("text", f"Question {idx + 1}"),
+                description=None,
+                explanation=item.get("explanation"),
+                remark=item.get("remark"),
+                order=item.get("order", idx),
+                validation=item.get("validation", {"required": True}),
+                choices=raw_choices,
+                conditional_logic=item.get("conditionalLogic"),
+                is_ai_generated=True,
+                verified_by_researcher=False,
+                target_objective_id=item.get("targetObjectiveId"),
+                target_outcome_name=item.get("targetOutcomeName"),
+            )
+            self.session.add(db_q)
+            created_questions_list.append(db_q)
+
+        # 6. Add Mappings
+        raw_mappings = gen_data.get("mappings", [])
+        if isinstance(raw_mappings, list):
+            for m in raw_mappings:
+                if isinstance(m, dict):
+                    raw_cids = m.get("coveredQuestionIds", [])
+                    mapped_cids = [question_ids_map.get(cid, cid) for cid in raw_cids] if isinstance(raw_cids, list) else []
+                    db_m = QuestionnaireMapping(
+                        questionnaire_id=q.id,
+                        objective_id=m.get("objectiveId", "OBJ-1"),
+                        objective_title=m.get("objectiveTitle", "Requirement Objective"),
+                        outcome_name=m.get("outcomeName", "Primary Endpoint"),
+                        covered_question_ids=mapped_cids,
+                        is_covered=m.get("isCovered", True),
+                        coverage_notes=m.get("coverageNotes"),
+                    )
+                    self.session.add(db_m)
+
+        await self.session.commit()
+        created = await self.questionnaire_repo.get_questionnaire_by_id(q.id)
+
+        # 7. Asynchronously index newly created questions into Pinecone
+        try:
+            if created and created.questions and pinecone_svc.is_configured:
+                vectors_to_upsert = [
+                    {
+                        "id": q_item.id,
+                        "text": q_item.text,
+                        "domain": payload.requirements[:60],
+                        "variableName": q_item.variable_name,
+                        "type": q_item.type,
+                        "choices": q_item.choices,
+                        "explanation": q_item.explanation,
+                        "remark": q_item.remark,
+                    }
+                    for q_item in created.questions
+                ]
+                await pinecone_svc.upsert_questions(vectors_to_upsert)
+        except Exception as e:
+            logger.warning(f"Failed to upsert new questions into Pinecone: {e}")
+
+        await self.audit_repo.log_event(
+            event_type="questionnaire:semantic_requirements_generate",
+            action="questionnaire:semantic_requirements_generate",
+            user_id=current_user.id,
+            study_id=q.study_id,
+            entity_type="questionnaire",
+            entity_id=str(q.id),
+            details={
+                "requirements": payload.requirements,
+                "questions_count": len(created.questions) if created else 0,
+                "exemplars_retrieved": len(semantic_exemplars),
+            },
+        )
+
+        return self.serialize_questionnaire(created)
 
     async def submit_for_review(self, questionnaire_id: uuid.UUID, current_user: User) -> QuestionnaireResponse:
 
