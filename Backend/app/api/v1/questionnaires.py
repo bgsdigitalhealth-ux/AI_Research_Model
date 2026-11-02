@@ -1,6 +1,6 @@
 import uuid
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 
@@ -138,6 +138,20 @@ async def generate_from_requirements(
 ):
     service = QuestionnaireService(db)
     return await service.generate_from_requirements(payload, current_user)
+
+
+@router.post(
+    "/pinecone/sync-all",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_200_OK,
+    summary="Synchronize and embed all database questions, questionnaires, and studies into Pinecone namespace",
+)
+async def sync_pinecone_all_vectors(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = QuestionnaireService(db)
+    return await service.sync_all_pinecone_data(current_user)
 
 
 

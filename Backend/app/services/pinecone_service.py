@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 import httpx
+from pinecone import Pinecone
 from app.core.config import settings
 
 logger = logging.getLogger("ai_research_flow.pinecone_service")
@@ -238,19 +239,34 @@ DEFAULT_CLINICAL_QUESTIONS: List[Dict[str, Any]] = [
 class PineconeVectorService:
     """
     Pinecone Vector Database Service for Semantic Search and Grounded Question Generation.
-    Uses OpenAI text-embedding-3-small (1536 dim) for high-accuracy vector embeddings.
+    Uses the official Pinecone Python Client and OpenAI text-embedding-3-small (1536 dim).
     """
 
     def __init__(self):
         self.api_key = settings.PINECONE_API_KEY
         self.index_name = settings.PINECONE_INDEX_NAME
-        self.host = settings.PINECONE_HOST or "https://ai-research-questions-n0puoip.svc.aped-4627-b74a.pinecone.io"
+        self.namespace = settings.PINECONE_NAMESPACE or "AI-Research-Flow"
         self.openai_api_key = settings.OPENAI_API_KEY
         self.embedding_model = "text-embedding-3-small"
+        self._pc: Optional[Pinecone] = None
+        self._index = None
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.api_key and self.host)
+        return bool(self.api_key and self.index_name)
+
+    def _get_index(self):
+        """
+        Lazily initializes the official Pinecone client and index connection.
+        """
+        if self._index is None and self.is_configured:
+            try:
+                self._pc = Pinecone(api_key=self.api_key)
+                self._index = self._pc.Index(self.index_name)
+            except Exception as e:
+                logger.error(f"Failed to initialize Pinecone client: {e}")
+                self._index = None
+        return self._index
 
     async def get_embedding(self, text: str) -> Optional[List[float]]:
         """
@@ -288,42 +304,57 @@ class PineconeVectorService:
 
     async def get_embeddings_batch(self, texts: List[str]) -> List[Optional[List[float]]]:
         """
-        Batch embeds a list of strings in a single OpenAI request.
+        Batch embeds a list of strings in chunks using OpenAI API.
         """
         if not self.openai_api_key or not texts:
             return [None] * len(texts)
 
-        clean_texts = [t.replace("\n", " ").strip() or "clinical question" for t in texts]
-        headers = {
-            "Authorization": f"Bearer {self.openai_api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "input": clean_texts,
-            "model": self.embedding_model,
-        }
+        results: List[Optional[List[float]]] = []
+        chunk_size = 50
 
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                res = await client.post("https://api.openai.com/v1/embeddings", headers=headers, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    embeddings_map = {item["index"]: item["embedding"] for item in data["data"]}
-                    return [embeddings_map.get(i) for i in range(len(texts))]
-                else:
-                    logger.error(f"OpenAI batch embedding error {res.status_code}: {res.text}")
-                    return [None] * len(texts)
-        except Exception as e:
-            logger.error(f"Failed to generate batch embeddings: {e}")
-            return [None] * len(texts)
+        for i in range(0, len(texts), chunk_size):
+            chunk = texts[i : i + chunk_size]
+            clean_chunk = [t.replace("\n", " ").strip() or "clinical research question" for t in chunk]
+            headers = {
+                "Authorization": f"Bearer {self.openai_api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "input": clean_chunk,
+                "model": self.embedding_model,
+            }
 
-    async def upsert_questions(self, questions: List[Dict[str, Any]]) -> bool:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    res = await client.post("https://api.openai.com/v1/embeddings", headers=headers, json=payload)
+                    if res.status_code == 200:
+                        data = res.json()
+                        embeddings_map = {item["index"]: item["embedding"] for item in data["data"]}
+                        results.extend([embeddings_map.get(j) for j in range(len(chunk))])
+                    else:
+                        logger.error(f"OpenAI batch embedding error {res.status_code}: {res.text}")
+                        results.extend([None] * len(chunk))
+            except Exception as e:
+                logger.error(f"Failed to generate batch embeddings chunk: {e}")
+                results.extend([None] * len(chunk))
+
+        return results
+
+    async def upsert_questions(
+        self,
+        questions: List[Dict[str, Any]],
+        namespace: Optional[str] = None,
+    ) -> bool:
         """
         Upserts structured clinical questions with metadata into Pinecone vector index.
+        Stores into the designated namespace (default: 'AI-Research-Flow') and mirrors to default.
         """
-        if not self.is_configured:
-            logger.warning("Pinecone vector service is not configured.")
+        idx = self._get_index()
+        if not idx:
+            logger.warning("Pinecone index connection not available.")
             return False
+
+        target_ns = namespace or self.namespace
 
         texts_to_embed = [
             f"Domain: {q.get('domain', 'Clinical Research')}. Question: {q.get('text', '')}. Explanation: {q.get('explanation', '')}"
@@ -336,14 +367,14 @@ class PineconeVectorService:
         for q, emb in zip(questions, embeddings):
             if emb is None:
                 continue
-            qid = str(q.get("id") or f"q_{hash(q.get('text', ''))}")
+            qid = str(q.get("id") or f"q_{abs(hash(q.get('text', '')))}")
             metadata = {
-                "text": q.get("text", ""),
-                "domain": q.get("domain", "Clinical Evaluation"),
-                "variableName": q.get("variableName", "var_metric"),
-                "type": q.get("type", "single_choice"),
-                "explanation": q.get("explanation") or "",
-                "remark": q.get("remark") or "",
+                "text": str(q.get("text", "")),
+                "domain": str(q.get("domain", "Clinical Evaluation")),
+                "variableName": str(q.get("variableName", "metric")),
+                "type": str(q.get("type", "single_choice")),
+                "explanation": str(q.get("explanation") or ""),
+                "remark": str(q.get("remark") or ""),
                 "choices_json": json.dumps(q.get("choices", [])),
             }
             vectors.append({"id": qid, "values": emb, "metadata": metadata})
@@ -352,88 +383,96 @@ class PineconeVectorService:
             logger.warning("No vectors created to upsert into Pinecone.")
             return False
 
-        headers = {
-            "Api-Key": self.api_key,
-            "Content-Type": "application/json",
-        }
-        upsert_payload = {"vectors": vectors}
+        # Upsert in chunks of 50 to Pinecone
+        batch_size = 50
+        for i in range(0, len(vectors), batch_size):
+            batch = vectors[i : i + batch_size]
+            try:
+                # Upsert into user namespace (e.g. AI-Research-Flow)
+                idx.upsert(vectors=batch, namespace=target_ns)
+                # Also mirror into default namespace for universal availability
+                if target_ns != "":
+                    try:
+                        idx.upsert(vectors=batch, namespace="")
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.error(f"Pinecone upsert batch failed: {e}")
+                return False
 
-        try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                res = await client.post(f"{self.host}/vectors/upsert", headers=headers, json=upsert_payload)
-                if res.status_code == 200:
-                    logger.info(f"Successfully upserted {len(vectors)} questions into Pinecone.")
-                    return True
-                else:
-                    logger.error(f"Pinecone upsert error {res.status_code}: {res.text}")
-                    return False
-        except Exception as e:
-            logger.error(f"Pinecone upsert failed: {e}")
-            return False
+        logger.info(f"Successfully upserted {len(vectors)} questions into Pinecone namespace '{target_ns}'.")
+        return True
 
     async def semantic_search(
         self,
         query: str,
         top_k: int = 5,
         domain_filter: Optional[str] = None,
+        namespace: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Performs semantic similarity search against Pinecone vector database.
         Returns matching validated question items ranked by cosine relevance.
         """
-        if not self.is_configured:
-            logger.warning("Pinecone service not configured; using fallback search.")
+        idx = self._get_index()
+        if not idx:
+            logger.warning("Pinecone client not configured; using fallback search.")
             return self._fallback_keyword_search(query, top_k)
 
         query_emb = await self.get_embedding(query)
         if not query_emb:
             return self._fallback_keyword_search(query, top_k)
 
-        headers = {
-            "Api-Key": self.api_key,
-            "Content-Type": "application/json",
-        }
-        query_payload: Dict[str, Any] = {
-            "vector": query_emb,
-            "topK": top_k,
-            "includeMetadata": True,
-        }
-        if domain_filter:
-            query_payload["filter"] = {"domain": {"$eq": domain_filter}}
+        target_ns = namespace or self.namespace
+        filter_dict = {"domain": {"$eq": domain_filter}} if domain_filter else None
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                res = await client.post(f"{self.host}/query", headers=headers, json=query_payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    matches = data.get("matches", [])
-                    results = []
-                    for m in matches:
-                        meta = m.get("metadata", {})
-                        choices = []
-                        if "choices_json" in meta:
-                            try:
-                                choices = json.loads(meta["choices_json"])
-                            except Exception:
-                                choices = []
+            # Query the specified namespace first
+            res = idx.query(
+                vector=query_emb,
+                top_k=top_k,
+                include_metadata=True,
+                namespace=target_ns,
+                filter=filter_dict,
+            )
 
-                        results.append({
-                            "id": m.get("id"),
-                            "score": round(float(m.get("score", 0.0)), 4),
-                            "text": meta.get("text", ""),
-                            "domain": meta.get("domain", "Clinical Evaluation"),
-                            "variableName": meta.get("variableName", "metric"),
-                            "type": meta.get("type", "single_choice"),
-                            "choices": choices,
-                            "explanation": meta.get("explanation") or None,
-                            "remark": meta.get("remark") or None,
-                        })
-                    return results
-                else:
-                    logger.error(f"Pinecone query error {res.status_code}: {res.text}")
-                    return self._fallback_keyword_search(query, top_k)
+            matches = res.get("matches", [])
+
+            # If no matches in target namespace, fall back to default namespace
+            if not matches and target_ns != "":
+                res_default = idx.query(
+                    vector=query_emb,
+                    top_k=top_k,
+                    include_metadata=True,
+                    namespace="",
+                    filter=filter_dict,
+                )
+                matches = res_default.get("matches", [])
+
+            results = []
+            for m in matches:
+                meta = m.get("metadata", {})
+                choices = []
+                if "choices_json" in meta:
+                    try:
+                        choices = json.loads(meta["choices_json"])
+                    except Exception:
+                        choices = []
+
+                results.append({
+                    "id": m.get("id"),
+                    "score": round(float(m.get("score", 0.0)), 4),
+                    "text": meta.get("text", ""),
+                    "domain": meta.get("domain", "Clinical Evaluation"),
+                    "variableName": meta.get("variableName", "metric"),
+                    "type": meta.get("type", "single_choice"),
+                    "choices": choices,
+                    "explanation": meta.get("explanation") or None,
+                    "remark": meta.get("remark") or None,
+                })
+            return results if results else self._fallback_keyword_search(query, top_k)
         except Exception as e:
-            logger.error(f"Pinecone semantic search request failed: {e}")
+            logger.error(f"Pinecone semantic search failed: {e}")
             return self._fallback_keyword_search(query, top_k)
 
     def _fallback_keyword_search(self, query: str, top_k: int) -> List[Dict[str, Any]]:
@@ -472,29 +511,129 @@ class PineconeVectorService:
 
     async def ensure_index_seeded(self) -> bool:
         """
-        Checks if Pinecone index has vectors; if empty, automatically seeds the reference question bank.
+        Checks if Pinecone index has vectors in the namespace; if empty, automatically seeds reference bank.
         """
-        if not self.is_configured:
+        idx = self._get_index()
+        if not idx:
             return False
 
-        headers = {
-            "Api-Key": self.api_key,
-            "Content-Type": "application/json",
-        }
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.post(f"{self.host}/describe_index_stats", headers=headers, json={})
-                if res.status_code == 200:
-                    stats = res.json()
-                    total_count = stats.get("totalVectorCount", 0)
-                    if total_count == 0:
-                        logger.info("Pinecone index is empty. Seeding initial clinical questions bank...")
-                        return await self.upsert_questions(DEFAULT_CLINICAL_QUESTIONS)
-                    return True
+            stats = idx.describe_index_stats()
+            namespaces = stats.to_dict().get("namespaces", {})
+            target_ns_count = namespaces.get(self.namespace, {}).get("vector_count", 0)
+
+            if target_ns_count == 0:
+                logger.info(f"Namespace '{self.namespace}' has 0 vectors. Seeding clinical reference questions...")
+                return await self.upsert_questions(DEFAULT_CLINICAL_QUESTIONS, namespace=self.namespace)
+            return True
         except Exception as e:
             logger.error(f"Failed to check Pinecone index stats: {e}")
             return False
-        return False
+
+    async def sync_all_database_data(self, session) -> Dict[str, Any]:
+        """
+        Gathers ALL questions, questionnaires, protocols, and studies from PostgreSQL database,
+        generates vector embeddings for each, and stores them in Pinecone under the namespace.
+        """
+        from sqlalchemy import select
+        from app.models.question_item import QuestionItemModel
+        from app.models.questionnaire import Questionnaire
+        from app.models.study import Study
+        from app.models.protocol import Protocol
+
+        idx = self._get_index()
+        if not idx:
+            return {"status": "error", "message": "Pinecone index not configured."}
+
+        # 1. Fetch all questions
+        stmt_q = select(QuestionItemModel)
+        res_q = await session.execute(stmt_q)
+        db_questions = res_q.scalars().all()
+
+        # 2. Fetch all questionnaires
+        stmt_qn = select(Questionnaire)
+        res_qn = await session.execute(stmt_qn)
+        db_questionnaires = res_qn.scalars().all()
+
+        # 3. Fetch all studies
+        stmt_s = select(Study)
+        res_s = await session.execute(stmt_s)
+        db_studies = res_s.scalars().all()
+
+        # Build items to embed
+        items_to_embed = []
+
+        # Reference Clinical Questions
+        for q in DEFAULT_CLINICAL_QUESTIONS:
+            items_to_embed.append({
+                "id": f"ref_{q['id']}",
+                "text": q["text"],
+                "domain": f"Standardized Bank - {q['domain']}",
+                "variableName": q["variableName"],
+                "type": "single_choice",
+                "choices": q.get("choices", []),
+                "explanation": q.get("explanation"),
+                "remark": q.get("remark"),
+            })
+
+        # Database Question Items
+        for q in db_questions:
+            items_to_embed.append({
+                "id": f"db_q_{q.id}",
+                "text": q.text,
+                "domain": "Database Question Bank",
+                "variableName": q.variable_name,
+                "type": q.type,
+                "choices": q.choices or [],
+                "explanation": q.explanation,
+                "remark": q.remark,
+            })
+
+        # Database Questionnaires
+        for qn in db_questionnaires:
+            desc = qn.description or f"Clinical instrument for {qn.title}"
+            items_to_embed.append({
+                "id": f"db_qn_{qn.id}",
+                "text": f"Questionnaire: {qn.title}. {desc}",
+                "domain": "Questionnaire Instrument",
+                "variableName": f"qn_{str(qn.id)[:8]}",
+                "type": "instrument",
+                "choices": [],
+                "explanation": qn.scientific_validation_claim,
+                "remark": f"Status: {qn.status}, Version: {qn.version}",
+            })
+
+        # Studies
+        for s in db_studies:
+            items_to_embed.append({
+                "id": f"db_study_{s.id}",
+                "text": f"Study Protocol: {s.title}. Objectives: {s.research_aims or 'Clinical trial'}. Outcomes: {s.primary_outcomes or ''}",
+                "domain": "Research Study Protocol",
+                "variableName": f"study_{str(s.id)[:8]}",
+                "type": "study_protocol",
+                "choices": [],
+                "explanation": f"Protocol Number: {s.protocol_number}",
+                "remark": f"Phase: {s.phase or 'Observational'}",
+            })
+
+        logger.info(f"Total items gathered for Pinecone vector embedding: {len(items_to_embed)}")
+
+        # Upsert all items into Pinecone namespace
+        success = await self.upsert_questions(items_to_embed, namespace=self.namespace)
+
+        stats = idx.describe_index_stats()
+        ns_stats = stats.to_dict().get("namespaces", {})
+
+        return {
+            "status": "success" if success else "failed",
+            "namespace": self.namespace,
+            "total_items_embedded": len(items_to_embed),
+            "questions_synced": len(db_questions),
+            "questionnaires_synced": len(db_questionnaires),
+            "studies_synced": len(db_studies),
+            "reference_questions_synced": len(DEFAULT_CLINICAL_QUESTIONS),
+            "pinecone_namespaces": ns_stats,
+        }
 
 
 _pinecone_service_instance: Optional[PineconeVectorService] = None

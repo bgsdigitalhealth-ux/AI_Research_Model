@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     PINECONE_API_KEY: Optional[str] = None
     PINECONE_INDEX_NAME: str = "ai-research-questions"
     PINECONE_HOST: Optional[str] = None
+    PINECONE_NAMESPACE: str = "AI-Research-Flow"
 
     # Email / Notification Mock or SMTP configuration
     SMTP_HOST: Optional[str] = None

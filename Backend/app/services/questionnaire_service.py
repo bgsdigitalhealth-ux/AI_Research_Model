@@ -1357,6 +1357,22 @@ class QuestionnaireService:
             query=query,
         )
 
+    async def sync_all_pinecone_data(self, current_user: User) -> dict:
+        """
+        Embeds and stores all database questions, questionnaires, and studies in Pinecone vector index.
+        """
+        from app.services.pinecone_service import get_pinecone_service
+        pinecone_svc = get_pinecone_service()
+        result = await pinecone_svc.sync_all_database_data(self.session)
+        await self.audit_repo.log_event(
+            action="PINECONE_VECTORS_SYNC",
+            user_id=current_user.id,
+            entity_type="PineconeIndex",
+            entity_id=uuid.uuid4(),
+            details=result,
+        )
+        return result
+
     async def generate_from_requirements(
         self,
         payload: GenerateFromRequirementsPayload,
