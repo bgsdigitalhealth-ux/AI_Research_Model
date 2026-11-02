@@ -4,7 +4,13 @@ import math
 import re
 from typing import Any, Dict, List, Optional, TypedDict
 import httpx
-from langgraph.graph import StateGraph, START, END
+
+try:
+    from langgraph.graph import StateGraph, START, END
+    HAS_LANGGRAPH = True
+except (ImportError, Exception):
+    HAS_LANGGRAPH = False
+    StateGraph, START, END = None, None, None
 
 from app.core.config import settings
 from app.services.pinecone_service import get_pinecone_service, DEFAULT_CLINICAL_QUESTIONS
@@ -368,6 +374,9 @@ def build_questionnaire_rag_graph():
     Constructs and compiles the end-to-end LangGraph agent pipeline:
     START -> retrieve -> rerank -> calibrate -> synthesize -> validate -> END
     """
+    if not HAS_LANGGRAPH:
+        return None
+
     builder = StateGraph(QuestionnaireRAGState)
 
     builder.add_node("retrieve", retrieve_candidates_node)
@@ -422,8 +431,22 @@ class LangGraphQuestionnaireService:
             "error": None,
         }
 
-        final_state = await self.graph.ainvoke(initial_state)
-        return final_state.get("validated_questionnaire") or {}
+        if HAS_LANGGRAPH and self.graph is not None:
+            final_state = await self.graph.ainvoke(initial_state)
+            return final_state.get("validated_questionnaire") or {}
+
+        # Seamless deterministic node-by-node execution fallback
+        state = initial_state
+        r1 = await retrieve_candidates_node(state)
+        state.update(r1)
+        r2 = await rerank_candidates_node(state)
+        state.update(r2)
+        r3 = await calibrate_prompt_node(state)
+        state.update(r3)
+        r4 = await synthesize_node(state)
+        state.update(r4)
+        r5 = await validate_structure_node(state)
+        return r5.get("validated_questionnaire") or {}
 
 
 _langgraph_service_instance: Optional[LangGraphQuestionnaireService] = None

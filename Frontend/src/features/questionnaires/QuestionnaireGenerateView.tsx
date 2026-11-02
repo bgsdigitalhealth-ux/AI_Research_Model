@@ -341,15 +341,7 @@ export function QuestionnaireGenerateView() {
             {/* ============================================================== */}
             {activeTab === 'topic_only' && (
               <form onSubmit={handleTopicOnlySubmit} className="space-y-4">
-                <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 text-xs text-blue-900 flex items-start gap-2">
-                  <Sparkles className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold">AI Question Generation (Topic &amp; Description)</p>
-                    <p className="text-[11px] text-blue-700 mt-0.5">
-                      Provide your research topic and description/objectives. The backend AI agent uses LangGraph, Pinecone semantic vector retrieval, and prompt calibration to synthesize questions in the standard template format.
-                    </p>
-                  </div>
-                </div>
+
 
                 {/* Target Study Selector */}
                 <div className="space-y-1.5">
@@ -461,15 +453,7 @@ export function QuestionnaireGenerateView() {
             {/* ============================================================== */}
             {activeTab === 'topic_file' && (
               <form onSubmit={handleTopicFileSubmit} className="space-y-4">
-                <div className="rounded-lg bg-indigo-50/60 border border-indigo-200 p-3 text-xs text-indigo-900 flex items-start gap-2">
-                  <FileText className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold">Topic &amp; Description + Reference Document / Image</p>
-                    <p className="text-[11px] text-indigo-700 mt-0.5">
-                      Provide a topic and description alongside an uploaded research paper, protocol PDF, or diagram image. AI analyzes both your description and the file content to synthesize tailored questions grounded in that context.
-                    </p>
-                  </div>
-                </div>
+
 
                 {/* Target Study Selector */}
                 <div className="space-y-1.5">
@@ -614,15 +598,7 @@ export function QuestionnaireGenerateView() {
             {/* ============================================================== */}
             {activeTab === 'extract_file' && (
               <form onSubmit={handleExtractFileSubmit} className="space-y-5">
-                <div className="rounded-lg bg-emerald-50/60 border border-emerald-200 p-3 text-xs text-emerald-900 flex items-start gap-2">
-                  <FileUp className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold">Extract Existing Questions from PDF / Image File</p>
-                    <p className="text-[11px] text-emerald-700 mt-0.5">
-                      Upload an existing exam sheet, questionnaire, or question bank in PDF or Image format. AI extracts each question into the mandatory template format: Mandatory Question, Mandatory Options (Radio a,b,c with score), and Optional Remark.
-                    </p>
-                  </div>
-                </div>
+
 
                 {/* Target Study Selector */}
                 <div className="space-y-1.5">

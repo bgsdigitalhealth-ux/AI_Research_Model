@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT) || 15000;
+const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT) || 120000;
 
 export interface ApiErrorDetail {
   message: string;
@@ -111,9 +111,13 @@ apiClient.interceptors.response.use(
     let isUnavailable = false;
 
     if (!error.response) {
-      // Network error, backend server down or connection refused
+      // Network error, backend server down, connection refused or timeout
       isUnavailable = true;
-      errorMessage = `Cannot connect to server at ${API_BASE_URL}. The backend service is currently unreachable.`;
+      if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+        errorMessage = `The request timed out while the backend was processing. If the cloud server was waking from sleep, please try again now.`;
+      } else {
+        errorMessage = `Cannot connect to server at ${API_BASE_URL}. The backend service is currently unreachable.`;
+      }
     } else if (status === 404) {
       isUnavailable = true;
       errorMessage = `Endpoint '${url}' was not found on the backend service.`;
@@ -121,15 +125,14 @@ apiClient.interceptors.response.use(
       errorMessage = 'Session expired or unauthenticated. Please log in.';
     } else if (status === 403) {
       errorMessage = 'Access denied. You do not have permissions for this resource.';
-    } else if (status && status >= 500) {
-      isUnavailable = true;
-      errorMessage = `Backend server error (${status}). Please check backend logs.`;
     } else if (error.response?.data) {
       errorMessage =
         error.response.data.message ||
         error.response.data.detail ||
         error.response.data.error ||
-        error.message;
+        `Backend server error (${status}).`;
+    } else if (status && status >= 500) {
+      errorMessage = `Backend server error (${status}). Please try again.`;
     }
 
     const apiError: ApiErrorDetail = {
