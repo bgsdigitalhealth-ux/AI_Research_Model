@@ -44,7 +44,7 @@ export function EstimatesTable({
           <tbody className="divide-y divide-slate-100 text-slate-700">
             {estimates.map((row, idx) => {
               const pValFormatted =
-                row.pValue == null
+                row.pValue == null || isNaN(Number(row.pValue))
                   ? '—'
                   : Number(row.pValue) < 0.001
                   ? '< 0.001'
@@ -58,20 +58,20 @@ export function EstimatesTable({
                   : '—';
 
               const estFormatted =
-                row.estimate == null
+                row.estimate == null || isNaN(Number(row.estimate))
                   ? '—'
                   : Number(row.estimate) > 0
                   ? `+${Number(row.estimate).toFixed(4)}`
                   : Number(row.estimate).toFixed(4);
 
               const seFormatted =
-                row.stdError == null ? '—' : Number(row.stdError).toFixed(4);
+                row.stdError == null || isNaN(Number(row.stdError)) ? '—' : Number(row.stdError).toFixed(4);
 
               const statFormatted =
-                row.statistic == null ? '—' : Number(row.statistic).toFixed(3);
+                row.statistic == null || isNaN(Number(row.statistic)) ? '—' : Number(row.statistic).toFixed(3);
 
               const ciFormatted =
-                row.ciLower != null && row.ciUpper != null
+                row.ciLower != null && row.ciUpper != null && !isNaN(Number(row.ciLower)) && !isNaN(Number(row.ciUpper))
                   ? `[${Number(row.ciLower).toFixed(3)}, ${Number(row.ciUpper).toFixed(3)}]`
                   : '—';
 

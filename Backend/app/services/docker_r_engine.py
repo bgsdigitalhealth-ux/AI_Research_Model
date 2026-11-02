@@ -30,10 +30,10 @@ class DockerREngine:
         """
         try:
             res = subprocess.run(
-                ["docker", "--version"],
+                ["docker", "info"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=3,
+                timeout=2,
                 text=True,
             )
             return res.returncode == 0

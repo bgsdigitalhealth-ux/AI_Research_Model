@@ -98,12 +98,12 @@ export function ReportDetailView() {
     const methodLabel =
       run?.methodName || results?.methodId?.replace(/_/g, ' ').toUpperCase() || 'Statistical Analysis';
     const pValLabel =
-      results?.pValue != null
-        ? `p = ${results.pValue < 0.001 ? '< 0.001' : results.pValue.toFixed(4)}`
+      results?.pValue != null && !isNaN(Number(results.pValue))
+        ? `p = ${Number(results.pValue) < 0.001 ? '< 0.001' : Number(results.pValue).toFixed(4)}`
         : 'p < .05 (Statistically Significant)';
     const effectLabel =
-      results?.effectSize?.name && results?.effectSize?.value != null
-        ? ` (${results.effectSize.name} = ${results.effectSize.value.toFixed(2)})`
+      results?.effectSize?.name && results?.effectSize?.value != null && !isNaN(Number(results.effectSize.value))
+        ? ` (${results.effectSize.name} = ${Number(results.effectSize.value).toFixed(2)})`
         : '';
 
     return {
@@ -154,7 +154,7 @@ export function ReportDetailView() {
           content:
             results?.aiExplanation?.clinicalInterpretation ||
             `Analysis of cohort data yielded authoritative test statistic ${results?.testStatistic?.name || 't'} = ${
-              results?.testStatistic?.value != null ? Number(results.testStatistic.value).toFixed(2) : '—'
+              results?.testStatistic?.value != null && !isNaN(Number(results.testStatistic.value)) ? Number(results.testStatistic.value).toFixed(2) : '—'
             } (${pValLabel}${effectLabel}). Model fitness checks confirmed valid statistical assumptions without prohibitive heterogeneity.`,
           order: 3,
           status: 'verified',
@@ -176,7 +176,7 @@ export function ReportDetailView() {
 
   const report = fetchedReport || synthesizedReport;
   const isLoading = isSynthesizing ? false : isReportLoading;
-  const isError = isSynthesizing ? false : isReportError && !report;
+  const isError = isSynthesizing ? false : Boolean(isReportError && !report);
 
   const activeSection =
     report?.sections.find((s) => s.id === activeSectionId) || report?.sections[0];

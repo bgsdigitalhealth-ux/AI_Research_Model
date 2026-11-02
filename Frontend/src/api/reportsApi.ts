@@ -19,6 +19,16 @@ export const reportsApi = {
   },
 
   /**
+   * Retrieves synthesized draft report preview for /reports/new.
+   */
+  async getReportPreview(analysisRunId?: string): Promise<ResearchReport> {
+    const response = await apiClient.get<ResearchReport>('/reports/new', {
+      params: analysisRunId ? { analysisRunId } : undefined,
+    });
+    return response.data;
+  },
+
+  /**
    * Creates or drafts a new report compiling analysis runs and protocol metadata.
    */
   async createReport(payload: Partial<ResearchReport>): Promise<ResearchReport> {

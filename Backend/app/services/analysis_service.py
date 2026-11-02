@@ -483,8 +483,6 @@ class AnalysisService:
     async def run_analysis(
         self, config: AnalysisRunConfig, current_user: User
     ) -> AnalysisRunResponse:
-        study = await self._verify_study_permission(config.study_id, current_user, Permission.ANALYSIS_RUN)
-
         # 1. Fetch Snapshot
         stmt = select(DatasetSnapshot).where(DatasetSnapshot.id == config.dataset_snapshot_id)
         res = await self.session.execute(stmt)
@@ -495,6 +493,24 @@ class AnalysisService:
         if not snapshot.is_frozen:
             raise ConflictError("Cannot run statistical analysis on an unfrozen dataset.")
 
+        effective_study_id = config.study_id or snapshot.study_id
+        study = await self._verify_study_permission(effective_study_id, current_user, Permission.ANALYSIS_RUN)
+
+        # Resolve dependent variable and predictors dynamically if omitted
+        dep_var = config.dependent_variable
+        if not dep_var and snapshot.dataset_payload:
+            first_row = snapshot.dataset_payload[0]
+            valid_keys = [k for k in first_row.keys() if k not in ("id", "participant_id", "timestamp", "created_at", "_id")]
+            dep_var = valid_keys[0] if valid_keys else "Q1"
+        elif not dep_var:
+            dep_var = "Q1"
+
+        indep_vars = list(config.independent_variables or [])
+        if not indep_vars and config.method_id in ("linear_regression", "one_way_anova", "independent_t_test", "chi_square") and snapshot.dataset_payload:
+            first_row = snapshot.dataset_payload[0]
+            candidates = [k for k in first_row.keys() if k != dep_var and k not in ("id", "participant_id", "timestamp", "created_at", "_id")]
+            indep_vars = [candidates[0]] if candidates else ["group"]
+
         # Verify data integrity using stored checksum
         actual_payload_bytes = json.dumps(snapshot.dataset_payload, sort_keys=True).encode("utf-8")
         current_checksum = hashlib.sha256(actual_payload_bytes).hexdigest()
@@ -504,11 +520,16 @@ class AnalysisService:
         # 2. Create AnalysisRun record in running state
         start_time = time.time()
         now = datetime.now(timezone.utc)
+        run_config_dump = config.model_dump(mode="json", by_alias=True)
+        run_config_dump["studyId"] = str(effective_study_id)
+        run_config_dump["dependentVariable"] = dep_var
+        run_config_dump["independentVariables"] = indep_vars
+
         run = AnalysisRun(
-            study_id=config.study_id,
+            study_id=effective_study_id,
             dataset_snapshot_id=config.dataset_snapshot_id,
             method_id=config.method_id,
-            config=config.model_dump(mode="json", by_alias=True),
+            config=run_config_dump,
             status="running",
             progress_percent=25,
             status_message="Executing in Docker R containerized runtime...",
@@ -526,8 +547,8 @@ class AnalysisService:
             stats_output = DockerREngine.execute(
                 data=snapshot.dataset_payload,
                 method_id=config.method_id,
-                dependent_var=config.dependent_variable,
-                independent_vars=config.independent_variables,
+                dependent_var=dep_var,
+                independent_vars=indep_vars,
                 covariates=config.covariates,
                 confidence_level=config.confidence_level,
                 handle_missing=config.handle_missing,

@@ -17,8 +17,7 @@ export function useReport(id?: string, analysisRunId?: string | null) {
       if (!id) throw new Error('Report ID is required');
       if (id === 'new') {
         try {
-          const query = analysisRunId ? `?analysisRunId=${analysisRunId}` : '';
-          return await reportsApi.getReportById(`new${query}`);
+          return await reportsApi.getReportPreview(analysisRunId || undefined);
         } catch {
           return null;
         }

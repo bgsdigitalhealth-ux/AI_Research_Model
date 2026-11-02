@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, field_validator
 from app.schemas.common import BaseSchema
 
 VariableDataType = Literal["numeric", "categorical", "binary", "ordinal", "datetime", "text"]
@@ -124,16 +124,28 @@ class TestOptions(BaseSchema):
 class AnalysisRunConfig(BaseSchema):
     model_config = ConfigDict(populate_by_name=True)
 
-    study_id: uuid.UUID = Field(..., alias="studyId")
+    study_id: Optional[uuid.UUID] = Field(None, alias="studyId")
     dataset_snapshot_id: uuid.UUID = Field(..., alias="datasetSnapshotId")
     method_id: str = Field(..., alias="methodId")
-    dependent_variable: str = Field(..., alias="dependentVariable")
+    dependent_variable: Optional[str] = Field(None, alias="dependentVariable")
     independent_variables: List[str] = Field(default_factory=list, alias="independentVariables")
     covariates: Optional[List[str]] = Field(default_factory=list)
     stratify_by: Optional[str] = Field(None, alias="stratifyBy")
     confidence_level: float = Field(95.0, ge=50.0, le=99.9, alias="confidenceLevel")
     handle_missing: MissingDataHandlingMethod = Field("complete_case", alias="handleMissing")
     test_options: Optional[TestOptions] = Field(default_factory=TestOptions, alias="testOptions")
+
+    @field_validator("study_id", mode="before")
+    @classmethod
+    def validate_study_id(cls, v: Any) -> Optional[uuid.UUID]:
+        if v is None or v == "" or v == "study-default":
+            return None
+        if isinstance(v, uuid.UUID):
+            return v
+        try:
+            return uuid.UUID(str(v))
+        except (ValueError, AttributeError):
+            return None
 
 
 class AnalysisRunExecutor(BaseSchema):

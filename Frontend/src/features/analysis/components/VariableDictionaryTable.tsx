@@ -100,16 +100,16 @@ export function VariableDictionaryTable({
                         <span className="capitalize text-slate-600">{v.role}</span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono">
-                        <span className={v.missingPercentage > 10 ? 'text-amber-600 font-semibold' : 'text-slate-600'}>
-                          {v.missingCount} ({v.missingPercentage != null ? v.missingPercentage.toFixed(1) : '0.0'}%)
+                        <span className={v.missingPercentage != null && v.missingPercentage > 10 ? 'text-amber-600 font-semibold' : 'text-slate-600'}>
+                          {v.missingCount} ({v.missingPercentage != null && !isNaN(Number(v.missingPercentage)) ? Number(v.missingPercentage).toFixed(1) : '0.0'}%)
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-slate-600">{v.uniqueValuesCount}</td>
                       <td className="px-4 py-3 text-slate-500 text-[11px]">
-                        {v.summaryStats?.mean !== undefined && (
+                        {v.summaryStats?.mean != null && !isNaN(Number(v.summaryStats.mean)) && (
                           <span>
-                            $\mu$={v.summaryStats.mean.toFixed(2)}, $\sigma$={v.summaryStats.sd?.toFixed(2)} [
-                            {v.summaryStats.min}–{v.summaryStats.max}]
+                            μ={Number(v.summaryStats.mean).toFixed(2)}, σ={v.summaryStats.sd != null && !isNaN(Number(v.summaryStats.sd)) ? Number(v.summaryStats.sd).toFixed(2) : '—'} [
+                            {v.summaryStats.min ?? '—'}–{v.summaryStats.max ?? '—'}]
                           </span>
                         )}
                         {v.summaryStats?.categories && (

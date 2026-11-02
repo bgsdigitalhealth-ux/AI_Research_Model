@@ -307,7 +307,7 @@ export function DataQualityView() {
                         </Badge>
                       </div>
                       <p className="text-slate-600 mb-2">
-                        Affects {pat.affectedRecords} records ({pat.percentage.toFixed(1)}% of cohort)
+                        Affects {pat.affectedRecords} records ({(pat.percentage ?? 0).toFixed(1)}% of cohort)
                       </p>
                       <div className="text-[11px] text-slate-500">
                         Associated variables: <span className="font-mono">{pat.variableNames.join(', ')}</span>

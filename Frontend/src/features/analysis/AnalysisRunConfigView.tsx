@@ -140,7 +140,7 @@ export function AnalysisRunConfigView() {
 
     try {
       const res = await runAnalysisMutation.mutateAsync({
-        studyId: selectedDataset?.studyId || 'study-default',
+        studyId: selectedDataset?.studyId || undefined,
         datasetSnapshotId: selectedDatasetId,
         methodId: selectedMethodId,
         dependentVariable: effectiveDepVar,

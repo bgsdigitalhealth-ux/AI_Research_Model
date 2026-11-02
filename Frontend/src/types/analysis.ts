@@ -29,7 +29,7 @@ export interface VariableDefinition {
 
 export interface DatasetSnapshot {
   id: string;
-  studyId: string;
+  studyId?: string;
   studyTitle?: string;
   name: string;
   snapshotDate: string;
@@ -73,7 +73,7 @@ export interface AnalysisMethod {
 export type MissingDataHandlingMethod = 'complete_case' | 'multiple_imputation' | 'fiml' | 'mean_substitution';
 
 export interface AnalysisRunConfig {
-  studyId: string;
+  studyId?: string;
   datasetSnapshotId: string;
   methodId: AnalysisMethodType;
   dependentVariable: string;

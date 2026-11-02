@@ -172,8 +172,8 @@ export function AnalysisResultsView() {
                       ? 'text-emerald-600'
                       : 'text-slate-900'
                   }`}>
-                    {results.pValue != null
-                      ? results.pValue < 0.001
+                    {results.pValue != null && !isNaN(Number(results.pValue))
+                      ? Number(results.pValue) < 0.001
                         ? '< 0.001'
                         : Number(results.pValue).toFixed(4)
                       : '—'}
@@ -188,9 +188,9 @@ export function AnalysisResultsView() {
                     Effect Size {results.effectSize?.name && `(${results.effectSize.name})`}
                   </span>
                   <span className="text-lg font-bold text-slate-900">
-                    {results.effectSize?.value != null ? Number(results.effectSize.value).toFixed(3) : '—'}
+                    {results.effectSize?.value != null && !isNaN(Number(results.effectSize.value)) ? Number(results.effectSize.value).toFixed(3) : '—'}
                   </span>
-                  {results.effectSize?.ciLower != null && results.effectSize?.ciUpper != null && (
+                  {results.effectSize?.ciLower != null && results.effectSize?.ciUpper != null && !isNaN(Number(results.effectSize.ciLower)) && !isNaN(Number(results.effectSize.ciUpper)) && (
                     <span className="text-[10px] text-slate-500 block">
                       95% CI [{Number(results.effectSize.ciLower).toFixed(2)}, {Number(results.effectSize.ciUpper).toFixed(2)}]
                     </span>
@@ -200,12 +200,12 @@ export function AnalysisResultsView() {
                 <div className="rounded-md bg-slate-50 p-3">
                   <span className="text-[11px] font-semibold uppercase text-slate-400 block">Test Statistic</span>
                   <span className="text-lg font-bold text-slate-900 font-mono">
-                    {results.testStatistic && results.testStatistic.value != null
+                    {results.testStatistic && results.testStatistic.value != null && !isNaN(Number(results.testStatistic.value))
                       ? `${results.testStatistic.name} = ${Number(results.testStatistic.value).toFixed(2)}`
                       : '—'}
                   </span>
                   <span className="text-[10px] text-slate-500 block">
-                    Missing: {results.missingnessHandled.replace(/_/g, ' ')}
+                    Missing: {results.missingnessHandled ? String(results.missingnessHandled).replace(/_/g, ' ') : 'None'}
                   </span>
                 </div>
               </div>
