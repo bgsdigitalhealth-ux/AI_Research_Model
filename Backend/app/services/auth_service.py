@@ -152,13 +152,10 @@ class AuthService:
                 if old_admin:
                     old_admin.email = settings.DEFAULT_ADMIN_EMAIL.lower()
                     old_admin.hashed_password = get_password_hash(settings.DEFAULT_ADMIN_PASSWORD)
-                    await self.db.commit()
+                    await self.session.commit()
                     user = old_admin
                 else:
-                    admin_role = await self.role_repo.get_by_name("administrator")
-                    if not admin_role:
-                        roles = await self.role_repo.get_all()
-                        admin_role = roles[0] if roles else None
+                    admin_role = await self.user_repo.get_role_by_name("administrator")
 
                     new_admin = User(
                         id=uuid.uuid4(),
@@ -170,13 +167,13 @@ class AuthService:
                         is_verified=True,
                         mfa_enabled=False,
                     )
-                    self.db.add(new_admin)
-                    await self.db.commit()
+                    self.session.add(new_admin)
+                    await self.session.commit()
                     user = await self.user_repo.get_by_id_with_relations(new_admin.id) or new_admin
             else:
                 if not verify_password(payload.password, user.hashed_password):
                     user.hashed_password = get_password_hash(payload.password)
-                    await self.db.commit()
+                    await self.session.commit()
 
         if not user or not verify_password(payload.password, user.hashed_password):
             auth_rate_limiter.record_attempt(rate_key)
@@ -597,10 +594,7 @@ class AuthService:
         user = await self.user_repo.get_by_email(email_clean)
 
         if not user:
-            researcher_role = await self.role_repo.get_by_name("researcher")
-            if not researcher_role:
-                roles = await self.role_repo.get_all()
-                researcher_role = roles[0] if roles else None
+            researcher_role = await self.user_repo.get_role_by_name("researcher")
 
             new_user = User(
                 id=uuid.uuid4(),
@@ -612,8 +606,8 @@ class AuthService:
                 is_verified=True,
                 mfa_enabled=False,
             )
-            self.db.add(new_user)
-            await self.db.commit()
+            self.session.add(new_user)
+            await self.session.commit()
             user = await self.user_repo.get_by_id_with_relations(new_user.id) or new_user
 
         rate_key = f"{ip_address or 'unknown'}_{email_clean}"
@@ -639,7 +633,7 @@ class AuthService:
         )
 
         user.last_login_at = datetime.now(timezone.utc)
-        await self.db.commit()
+        await self.session.commit()
 
         await self.audit_repo.log_event(
             event_type="auth.otp_login",
@@ -687,7 +681,7 @@ class AuthService:
             await self.session_repo.revoke_all_user_sessions(current_user.id)
 
         current_user.updated_at = datetime.now(timezone.utc)
-        await self.db.commit()
+        await self.session.commit()
 
         await self.audit_repo.log_event(
             event_type="admin.credentials_updated",
