@@ -595,13 +595,19 @@ class AuthService:
 
         if not user:
             researcher_role = await self.user_repo.get_role_by_name("researcher")
+            if not researcher_role:
+                from sqlalchemy import select
+                from app.models.role import Role
+                stmt = select(Role).limit(1)
+                res = await self.session.execute(stmt)
+                researcher_role = res.scalars().first()
 
             new_user = User(
                 id=uuid.uuid4(),
                 email=email_clean,
                 hashed_password=get_password_hash("MockOtpAuthPass2026!"),
                 full_name=email_clean.split("@")[0].replace(".", " ").title(),
-                global_role_id=researcher_role.id if researcher_role else None,
+                global_role_id=researcher_role.id,
                 is_active=True,
                 is_verified=True,
                 mfa_enabled=False,
