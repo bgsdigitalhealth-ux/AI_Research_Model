@@ -3,7 +3,6 @@ import { QuickActionsBar } from './components/QuickActionsBar';
 import { MetricsGrid } from './components/MetricsGrid';
 import { StudyStatusSummarySection } from './components/StudyStatusSummarySection';
 import { RecentStudiesTable } from './components/RecentStudiesTable';
-import { WorkflowProgressTracker } from './components/WorkflowProgressTracker';
 import { AiAssistantWidget } from './components/AiAssistantWidget';
 
 export function DashboardView() {
@@ -28,9 +27,6 @@ export function DashboardView() {
 
         {/* Live Studies Table */}
         <RecentStudiesTable />
-
-        {/* Research Workflow Progress Tracker */}
-        <WorkflowProgressTracker />
       </div>
     </PageContainer>
   );

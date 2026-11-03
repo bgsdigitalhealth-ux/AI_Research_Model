@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageContainer } from '@/components/shared/PageContainer';
-import { useStudiesList, useCreateStudy } from '@/hooks/useStudies';
+import { useStudiesList, useCreateStudy, useDeleteStudy } from '@/hooks/useStudies';
 import { StatusState } from '@/components/shared/StatusState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,22 +18,20 @@ import {
   FileText,
   Brain,
   Sparkles,
-  CheckCircle2,
   Activity,
   FolderKanban,
-  FileUp,
-  Clock,
-  ArrowRight,
-  BookOpen,
   ChevronRight,
+  BookOpen,
   Target,
+  Trash2,
+  ArrowRight,
 } from 'lucide-react';
 
 export function StudiesView() {
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [showActivityFeed, setShowActivityFeed] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Form State for quick entry modal
   const [title, setTitle] = useState('');
@@ -48,51 +46,37 @@ export function StudiesView() {
   );
 
   const createStudyMutation = useCreateStudy();
+  const deleteStudyMutation = useDeleteStudy();
   const studies = Array.isArray(data) ? data : data?.items;
 
-  // Study Activities Stream (Reflects study creation, protocol RAG verification, and question generation)
-  const studyActivities = [
-    {
-      id: 'act-1',
-      studyTitle: 'Efficacy of Drug X in Type 2 Diabetes',
-      type: 'rag_verification',
-      icon: Brain,
-      color: 'text-purple-600 bg-purple-100',
-      title: 'RAG Protocol Verification Completed',
-      description: 'AI verified protocol against Admin standard protocol with 92% semantic similarity match.',
-      time: 'Just now',
-    },
-    {
-      id: 'act-2',
-      studyTitle: 'Efficacy of Drug X in Type 2 Diabetes',
-      type: 'question_generation',
-      icon: Sparkles,
-      color: 'text-blue-600 bg-blue-100',
-      title: 'AI Generated Questions Synthesized',
-      description: '5 candidate psychometric questions generated based on verified protocol test cases.',
-      time: '5 mins ago',
-    },
-    {
-      id: 'act-3',
-      studyTitle: 'Efficacy of Drug X in Type 2 Diabetes',
-      type: 'protocol_upload',
-      icon: FileUp,
-      color: 'text-emerald-600 bg-emerald-100',
-      title: 'Protocol Uploaded & Extracted',
-      description: 'drugx_protocol.pdf (2.4 MB) parsed into 5 core test case parameters.',
-      time: '12 mins ago',
-    },
-    {
-      id: 'act-4',
-      studyTitle: 'Neural Biomarkers & Cognitive Assessment Trial',
-      type: 'milestone',
-      icon: CheckCircle2,
-      color: 'text-amber-600 bg-amber-100',
-      title: 'Baseline Cohort Verified',
-      description: 'Primary efficacy dataset frozen for statistical report synthesis.',
-      time: '2 hours ago',
-    },
-  ];
+  const handleDeleteStudy = async (studyId: string, studyTitle: string) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete "${studyTitle}"? This will permanently remove the study and its associated records.`
+      )
+    ) {
+      return;
+    }
+    try {
+      setDeletingId(studyId);
+      await deleteStudyMutation.mutateAsync(studyId);
+      toast({
+        title: 'Study Deleted',
+        description: `"${studyTitle}" has been deleted successfully.`,
+        variant: 'default',
+      });
+      refetch();
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Failed to delete study.';
+      toast({
+        title: 'Delete Failed',
+        description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleOpenCreateModal = () => {
     const randomCode = Math.floor(100 + Math.random() * 900);
@@ -139,7 +123,7 @@ export function StudiesView() {
   return (
     <PageContainer
       title="My Studies"
-      description="Manage active clinical protocols, track AI RAG verification activities, and synthesize protocol-grounded questionnaires."
+      description="Manage active clinical protocols, conduct AI verification, and synthesize protocol-grounded questionnaires."
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'My Studies', isCurrent: true },
@@ -225,56 +209,7 @@ export function StudiesView() {
         </div>
 
         {/* ============================================================== */}
-        {/* 2. RECENT STUDY ACTIVITY FEED (All Activities Across Studies) */}
-        {/* ============================================================== */}
-        <Card className="shadow-xs border-slate-200">
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-purple-600" />
-                <h3 className="font-bold text-slate-900 text-sm">My Study Activities &amp; Protocol Log</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowActivityFeed(!showActivityFeed)}
-                className="text-xs text-purple-700 font-semibold hover:underline"
-              >
-                {showActivityFeed ? 'Hide Activity Feed' : 'Show All Activity'}
-              </button>
-            </div>
-
-            {showActivityFeed && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                {studyActivities.map((act) => {
-                  const Icon = act.icon;
-                  return (
-                    <div
-                      key={act.id}
-                      className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors text-xs"
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${act.color}`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-0.5 flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <p className="font-semibold text-slate-800 truncate">{act.title}</p>
-                          <span className="text-[10px] text-slate-400 shrink-0">{act.time}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-600 line-clamp-2">{act.description}</p>
-                        <p className="text-[10px] text-purple-700 font-medium truncate pt-0.5">
-                          Study: {act.studyTitle}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ============================================================== */}
-        {/* 3. FILTER TOOLBAR & ACTIVE STUDIES LIST                        */}
+        {/* 2. FILTER TOOLBAR & ACTIVE STUDIES LIST                        */}
         {/* ============================================================== */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center gap-2">
@@ -356,7 +291,7 @@ export function StudiesView() {
             {studies.map((study) => (
               <Card key={study.id} className="hover:border-slate-300 transition-all shadow-xs">
                 <CardContent className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  {/* Left Column: Study Details & Badges */}
+                  {/* Left Column: Study Details */}
                   <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
@@ -368,45 +303,24 @@ export function StudiesView() {
                       <Badge variant="outline" className="font-mono text-[10px] bg-slate-50">
                         {study.protocolNumber}
                       </Badge>
-                      <Badge variant="default" className="capitalize text-[10px] bg-slate-900 text-white">
-                        {study.status.replace('_', ' ')}
-                      </Badge>
                     </div>
 
                     <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
                       {study.principalInvestigator && (
-                        <span>PI: <strong className="text-slate-700">{study.principalInvestigator}</strong></span>
+                        <span>
+                          PI: <strong className="text-slate-700">{study.principalInvestigator}</strong>
+                        </span>
                       )}
-                      {study.phase && <span>Phase: <strong className="text-slate-700">{study.phase}</strong></span>}
+                      {study.phase && (
+                        <span>
+                          Phase: <strong className="text-slate-700">{study.phase}</strong>
+                        </span>
+                      )}
                       <span>Updated: {formatDate(study.updatedAt)}</span>
-                    </div>
-
-                    {/* Protocol Verification & Questions Status Badges */}
-                    <div className="flex items-center gap-2 pt-1 flex-wrap">
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] text-emerald-700 border-emerald-200 bg-emerald-50 flex items-center gap-1 font-semibold"
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span>RAG Verified: 92% Admin Match</span>
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] text-purple-700 border-purple-200 bg-purple-50 flex items-center gap-1 font-semibold"
-                      >
-                        <Sparkles className="h-3 w-3" />
-                        <span>5 Questions Generated</span>
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] text-blue-700 border-blue-200 bg-blue-50 font-semibold"
-                      >
-                        ITT Plan Configured
-                      </Badge>
                     </div>
                   </div>
 
-                  {/* Right Column: Direct Quick Action Buttons */}
+                  {/* Right Column: Direct Quick Action Buttons & Delete Button */}
                   <div className="flex items-center gap-2 shrink-0 w-full md:w-auto justify-end flex-wrap">
                     <Link to={`/studies/${study.id}?tab=test_case_analysis`}>
                       <Button
@@ -440,6 +354,17 @@ export function StudiesView() {
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Button>
                     </Link>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 gap-1 font-semibold"
+                      onClick={() => handleDeleteStudy(study.id, study.title)}
+                      disabled={deletingId === study.id}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{deletingId === study.id ? 'Deleting...' : 'Delete'}</span>
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

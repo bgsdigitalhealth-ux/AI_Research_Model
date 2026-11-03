@@ -201,12 +201,12 @@ export function UserProfile() {
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white shadow-xs">
           {initials}
         </div>
-        <div className="hidden sm:block text-left">
-          <p className="text-xs font-semibold text-slate-900 leading-tight">
+        <div className="hidden sm:block text-left max-w-[140px]">
+          <p className="text-xs font-semibold text-slate-900 leading-tight truncate">
             {user.fullName}
           </p>
-          <p className="text-[10px] text-slate-500 capitalize">
-            {user.role.replace('_', ' ')}
+          <p className="text-[10px] text-slate-500 truncate">
+            {user.email || user.role.replace('_', ' ')}
           </p>
         </div>
         <ChevronDown className="h-3.5 w-3.5 text-slate-400" />

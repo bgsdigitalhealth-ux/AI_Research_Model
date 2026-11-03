@@ -25,5 +25,9 @@ export const studiesApi = {
     const response = await apiClient.post<Study>('/studies', payload);
     return response.data;
   },
+
+  async deleteStudy(id: string): Promise<void> {
+    await apiClient.delete(`/studies/${id}`);
+  },
 };
 

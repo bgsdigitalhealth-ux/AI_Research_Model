@@ -354,51 +354,38 @@ export function DataCollectionView() {
       }
     >
       <div className="space-y-6">
-        {/* Network & Offline Status Banner */}
-        <div
-          className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
-            isOnline
-              ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
-              : 'bg-amber-50/70 border-amber-300 text-amber-950'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`p-2.5 rounded-lg ${
-                isOnline ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white animate-pulse'
-              }`}
-            >
-              {isOnline ? <Wifi className="h-5 w-5" /> : <WifiOff className="h-5 w-5" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-bold">
-                  {isOnline ? 'System Online (Supabase Database Connected)' : 'System in Offline Mode'}
-                </h4>
-                <Badge variant={isOnline ? 'success' : 'warning'} className="text-[10px]">
-                  {isOnline ? 'Connected' : 'Local Storage Active'}
-                </Badge>
+        {/* Offline Queue Status (Only visible if offline) */}
+        {!isOnline && (
+          <div className="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50/70 border-amber-300 text-amber-950">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-amber-600 text-white animate-pulse">
+                <WifiOff className="h-5 w-5" />
               </div>
-              <p className="text-xs opacity-90 mt-0.5">
-                {isOnline
-                  ? 'All question sets are saved into user folders in Supabase PostgreSQL.'
-                  : 'No internet connection. Responses are validated locally and queued in IndexedDB.'}
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold">System in Offline Mode</h4>
+                  <Badge variant="warning" className="text-[10px]">
+                    Local Storage Active
+                  </Badge>
+                </div>
+                <p className="text-xs opacity-90 mt-0.5">
+                  No internet connection. Responses are validated locally and queued in IndexedDB.
+                </p>
+              </div>
             </div>
+            {totalUnsynced > 0 && (
+              <Button
+                size="sm"
+                onClick={triggerSync}
+                disabled={isSyncing}
+                className="gap-1.5 bg-amber-700 hover:bg-amber-800 text-white text-xs shrink-0"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Synchronizing...' : `Sync Queue (${totalUnsynced})`}</span>
+              </Button>
+            )}
           </div>
-
-          {isOnline && totalUnsynced > 0 && (
-            <Button
-              size="sm"
-              onClick={triggerSync}
-              disabled={isSyncing}
-              className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs shrink-0"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Synchronizing...' : `Sync Queue (${totalUnsynced})`}</span>
-            </Button>
-          )}
-        </div>
+        )}
 
         {/* Sync Queue Summary Metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1017,17 +1004,6 @@ export function DataCollectionView() {
             </div>
           </div>
         )}
-
-        {/* Local Security & Data Retention Advisory */}
-        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-2">
-          <div className="flex items-center gap-2 text-slate-800 font-bold">
-            <Shield className="h-4 w-4 text-blue-600" />
-            <span>Folder Organization & Supabase Persistence Notice</span>
-          </div>
-          <p className="leading-relaxed">
-            Every submitted question set is classified under the participant's <strong>User Name Folder</strong> in Supabase PostgreSQL. Submissions store complete answers, 6-level maturity scores, and dynamic research remarks with unique confirmation codes for clinical integrity.
-          </p>
-        </div>
       </div>
     </PageContainer>
   );

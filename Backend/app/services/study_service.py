@@ -378,6 +378,44 @@ class StudyService:
 
         return StudyStatusSummaryResponse(total=total, by_status=by_status)
 
+    async def delete_study(
+        self,
+        study_id: uuid.UUID,
+        current_user: User,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> bool:
+        study = await self.study_repo.get_study_by_id(study_id)
+        if not study:
+            raise NotFoundError(f"Study with id '{study_id}' not found")
+
+        # Admin or PI can delete
+        is_admin = bool(current_user.global_role and current_user.global_role.name == RoleName.ADMINISTRATOR)
+        if not is_admin:
+            membership = await self.membership_repo.get_user_study_membership(study_id, current_user.id)
+            if not membership or membership.role.name != RoleName.PRINCIPAL_INVESTIGATOR.value:
+                raise PermissionDeniedError("Only Administrators or Principal Investigators can delete studies")
+
+        # Delete associated memberships first to prevent FK constraint issues
+        from sqlalchemy import delete
+        from app.models.study_membership import StudyMembership
+        await self.session.execute(delete(StudyMembership).where(StudyMembership.study_id == study_id))
+        
+        # Delete study
+        await self.study_repo.delete(study_id)
+        await self.session.commit()
+
+        await self.audit_repo.log_event(
+            action="study:delete",
+            user_id=current_user.id,
+            entity_type="study",
+            entity_id=str(study_id),
+            details={"study_id": str(study_id), "title": study.title},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return True
+
     def _to_study_response(self, study: Study) -> StudyResponse:
         pi_name = study.principal_investigator.full_name if study.principal_investigator else None
         return StudyResponse(

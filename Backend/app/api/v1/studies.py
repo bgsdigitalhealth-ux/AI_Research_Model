@@ -182,3 +182,25 @@ async def update_governance(
     service = StudyService(db)
     return await service.update_governance(study_id, payload, current_user, ip, ua)
 
+
+@router.delete(
+    "/{study_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a study record from the research platform",
+)
+async def delete_study(
+    study_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ip = get_client_ip(request)
+    ua = get_user_agent(request)
+    service = StudyService(db)
+    await service.delete_study(study_id, current_user, ip, ua)
+    return StandardResponse(
+        success=True,
+        message="Study deleted successfully",
+        data={"deleted_id": str(study_id)},
+    )
+
