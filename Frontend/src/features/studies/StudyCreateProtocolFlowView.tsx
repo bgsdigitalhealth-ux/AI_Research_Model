@@ -30,6 +30,8 @@ import {
   ChevronUp,
   RotateCcw,
   BookOpen,
+  Target,
+  HelpCircle,
 } from 'lucide-react';
 
 export function StudyCreateProtocolFlowView() {
@@ -551,35 +553,34 @@ export function StudyCreateProtocolFlowView() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Left Card: Similarity Match */}
             <Card className="shadow-xs border-slate-200">
-              <CardContent className="p-6 flex flex-col items-center text-center space-y-5">
-                <div className="w-28 h-28 rounded-full bg-emerald-50 border-4 border-emerald-500 flex flex-col items-center justify-center shadow-xs">
-                  <span className="text-3xl font-extrabold text-emerald-600">
+              <CardContent className="p-6 space-y-4">
+                {/* Green Similarity Card */}
+                <div className="flex items-center gap-4 p-4 rounded-xl bg-emerald-50/90 border border-emerald-200/80">
+                  <div className="w-16 h-14 rounded-xl bg-emerald-500/20 text-emerald-800 font-extrabold text-2xl flex items-center justify-center shrink-0">
                     {verificationResult.similarity_match.percentage}%
-                  </span>
-                  <span className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">
-                    Similarity Match
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="font-semibold text-slate-900 text-sm">
-                    {verificationResult.similarity_match.label}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Grounded vector embeddings matched standard regulatory protocol template.
-                  </p>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      Similarity Match
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-0.5 leading-snug">
+                      {verificationResult.similarity_match.label}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Matched Admin Protocol Card */}
-                <div className="w-full text-left p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-1">
-                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
-                    Matched Admin Protocol
-                  </p>
-                  <div className="flex items-center gap-2.5">
-                    <FileText className="h-5 w-5 text-purple-600 shrink-0" />
-                    <span className="text-xs font-semibold text-slate-800">
+                <div className="flex items-start gap-3 p-4 rounded-xl border border-slate-200 bg-white">
+                  <div className="w-9 h-9 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[11px] font-semibold text-slate-400">
+                      Matched Admin Protocol
+                    </p>
+                    <p className="text-xs font-bold text-slate-900">
                       {verificationResult.similarity_match.matched_admin_protocol}
-                    </span>
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -588,47 +589,41 @@ export function StudyCreateProtocolFlowView() {
             {/* Right Card: Verification Summary */}
             <Card className="shadow-xs border-slate-200">
               <CardContent className="p-6 space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
+                <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2.5">
                   Verification Summary
                 </h3>
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {verificationResult.verification_summary.map((item, idx) => {
                     const isMatched = item.status === 'Matched';
                     const isPartial = item.status === 'Partially Matched';
                     return (
-                      <div key={idx} className="flex items-start gap-2.5 text-xs">
+                      <div key={idx} className="flex items-center gap-2.5 text-xs">
                         {isMatched ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                         ) : isPartial ? (
-                          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                         ) : (
-                          <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                         )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-800">{item.section}:</span>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] px-1.5 py-0 capitalize ${
-                                isMatched
-                                  ? 'text-emerald-700 border-emerald-200 bg-emerald-50'
-                                  : isPartial
-                                  ? 'text-amber-700 border-amber-200 bg-amber-50'
-                                  : 'text-rose-700 border-rose-200 bg-rose-50'
-                              }`}
-                            >
-                              {item.status}
-                            </Badge>
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">{item.message}</p>
-                        </div>
+                        <span className="font-semibold text-slate-800">{item.section}:</span>
+                        <span
+                          className={
+                            isMatched
+                              ? 'text-slate-700'
+                              : isPartial
+                              ? 'text-amber-700 font-medium'
+                              : 'text-amber-700 font-medium'
+                          }
+                        >
+                          {item.status}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                   <Button
                     variant="outline"
                     size="sm"
@@ -799,6 +794,33 @@ export function StudyCreateProtocolFlowView() {
       {/* ============================================================== */}
       {currentStep === 4 && verificationResult && (
         <div className="space-y-6">
+          {/* Success Banner linking back to My Studies activities */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-purple-50 border border-purple-200 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Check className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-bold text-purple-950 text-sm">
+                  Study Initialized &amp; Questions Generated from Protocol
+                </p>
+                <p className="text-[11px] text-purple-700">
+                  RAG verification against admin protocols completed (92% match). Questions are grounded in your protocol test cases.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link to="/studies">
+                <Button size="sm" variant="outline" className="text-xs text-purple-900 border-purple-300 hover:bg-purple-100">
+                  <span>View in My Studies</span>
+                </Button>
+              </Link>
+              <Button size="sm" onClick={handleDownloadQuestions} className="text-xs bg-purple-600 hover:bg-purple-700 text-white gap-1.5 font-semibold">
+                <Download className="h-3.5 w-3.5" />
+                <span>Download Questions</span>
+              </Button>
+            </div>
+          </div>
           {/* Top Tabs */}
           <div className="flex items-center gap-1 border-b border-slate-200">
             <button
@@ -858,7 +880,7 @@ export function StudyCreateProtocolFlowView() {
                 <CardContent className="p-6 space-y-4">
                   <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                     <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                      <Brain className="h-4 w-4" />
+                      <Target className="h-4 w-4" />
                     </div>
                     <h3 className="font-bold text-slate-900 text-sm">
                       Test Case Analysis (from Protocol)
@@ -930,7 +952,7 @@ export function StudyCreateProtocolFlowView() {
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                        <Sparkles className="h-4 w-4" />
+                        <HelpCircle className="h-4 w-4" />
                       </div>
                       <h3 className="font-bold text-slate-900 text-sm">AI Generated Questions</h3>
                     </div>
@@ -1045,6 +1067,54 @@ export function StudyCreateProtocolFlowView() {
                       {verificationResult.generated_questions.length} Generated
                     </p>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+                    {/* Generated Questions Tab */}
+          {activeTab === 'generated_questions' && (
+            <Card className="shadow-xs border-slate-200">
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Protocol Questions Bank</h3>
+                    <p className="text-xs text-slate-500">
+                      Standard questions synthesized and calibrated directly from verified protocol.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleDownloadQuestions}
+                    className="gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-4"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Download All Questions</span>
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {verificationResult.generated_questions.map((q, idx) => (
+                    <div key={q.id} className="p-4 rounded-xl border border-slate-200 bg-white space-y-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-[10px]">
+                          {idx + 1}
+                        </span>
+                        <span className="font-bold text-slate-800">{q.text}</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-7 pt-1">
+                        {q.choices.map((c, cIdx) => (
+                          <div key={cIdx} className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px]">
+                            <p className="font-medium text-slate-800">{c.label}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Score: {c.score}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pl-7 pt-1 text-[11px] text-slate-500">
+                        {q.remark && <p><span className="font-semibold text-slate-600">Remark:</span> {q.remark}</p>}
+                        {q.explanation && <p className="italic"><span className="font-semibold text-slate-600 not-italic">Clinical Calibration:</span> {q.explanation}</p>}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

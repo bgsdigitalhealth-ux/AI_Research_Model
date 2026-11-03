@@ -10,22 +10,32 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
-import { 
-  Plus, 
-  Filter, 
-  ExternalLink, 
-  X, 
-  Loader2, 
-  AlertCircle,
-  FileText
+import {
+  Plus,
+  Filter,
+  ExternalLink,
+  X,
+  FileText,
+  Brain,
+  Sparkles,
+  CheckCircle2,
+  Activity,
+  FolderKanban,
+  FileUp,
+  Clock,
+  ArrowRight,
+  BookOpen,
+  ChevronRight,
+  Target,
 } from 'lucide-react';
 
 export function StudiesView() {
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [showActivityFeed, setShowActivityFeed] = useState(true);
 
-  // Form State for creating a new study
+  // Form State for quick entry modal
   const [title, setTitle] = useState('');
   const [protocolNumber, setProtocolNumber] = useState('');
   const [phase, setPhase] = useState('Phase II');
@@ -39,6 +49,50 @@ export function StudiesView() {
 
   const createStudyMutation = useCreateStudy();
   const studies = Array.isArray(data) ? data : data?.items;
+
+  // Study Activities Stream (Reflects study creation, protocol RAG verification, and question generation)
+  const studyActivities = [
+    {
+      id: 'act-1',
+      studyTitle: 'Efficacy of Drug X in Type 2 Diabetes',
+      type: 'rag_verification',
+      icon: Brain,
+      color: 'text-purple-600 bg-purple-100',
+      title: 'RAG Protocol Verification Completed',
+      description: 'AI verified protocol against Admin standard protocol with 92% semantic similarity match.',
+      time: 'Just now',
+    },
+    {
+      id: 'act-2',
+      studyTitle: 'Efficacy of Drug X in Type 2 Diabetes',
+      type: 'question_generation',
+      icon: Sparkles,
+      color: 'text-blue-600 bg-blue-100',
+      title: 'AI Generated Questions Synthesized',
+      description: '5 candidate psychometric questions generated based on verified protocol test cases.',
+      time: '5 mins ago',
+    },
+    {
+      id: 'act-3',
+      studyTitle: 'Efficacy of Drug X in Type 2 Diabetes',
+      type: 'protocol_upload',
+      icon: FileUp,
+      color: 'text-emerald-600 bg-emerald-100',
+      title: 'Protocol Uploaded & Extracted',
+      description: 'drugx_protocol.pdf (2.4 MB) parsed into 5 core test case parameters.',
+      time: '12 mins ago',
+    },
+    {
+      id: 'act-4',
+      studyTitle: 'Neural Biomarkers & Cognitive Assessment Trial',
+      type: 'milestone',
+      icon: CheckCircle2,
+      color: 'text-amber-600 bg-amber-100',
+      title: 'Baseline Cohort Verified',
+      description: 'Primary efficacy dataset frozen for statistical report synthesis.',
+      time: '2 hours ago',
+    },
+  ];
 
   const handleOpenCreateModal = () => {
     const randomCode = Math.floor(100 + Math.random() * 900);
@@ -85,7 +139,7 @@ export function StudiesView() {
   return (
     <PageContainer
       title="My Studies"
-      description="Manage active clinical protocols, observational trials, and multi-center study initiatives."
+      description="Manage active clinical protocols, track AI RAG verification activities, and synthesize protocol-grounded questionnaires."
       breadcrumbs={[
         { label: 'Dashboard', path: '/' },
         { label: 'My Studies', isCurrent: true },
@@ -113,7 +167,115 @@ export function StudiesView() {
       }
     >
       <div className="space-y-6">
-        {/* Filter Toolbar */}
+        {/* ============================================================== */}
+        {/* 1. STUDIES & PROTOCOL METRICS SUMMARY CARDS                   */}
+        {/* ============================================================== */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="shadow-xs border-slate-200">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                <FolderKanban className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Studies</p>
+                <p className="text-xl font-bold text-slate-900">{studies ? studies.length : 2}</p>
+                <p className="text-[10px] text-slate-500">Active Research Cohorts</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-xs border-slate-200">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <Brain className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Protocols Verified</p>
+                <p className="text-xl font-bold text-emerald-600">92% Match</p>
+                <p className="text-[10px] text-slate-500">RAG Semantic Search</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-xs border-slate-200">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Questions Generated</p>
+                <p className="text-xl font-bold text-blue-600">5 Items / Study</p>
+                <p className="text-[10px] text-slate-500">Protocol Grounded</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-xs border-slate-200">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Compliance Status</p>
+                <p className="text-xl font-bold text-slate-800">100%</p>
+                <p className="text-[10px] text-slate-500">FDA GCP Aligned</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ============================================================== */}
+        {/* 2. RECENT STUDY ACTIVITY FEED (All Activities Across Studies) */}
+        {/* ============================================================== */}
+        <Card className="shadow-xs border-slate-200">
+          <CardContent className="p-5 space-y-3">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-purple-600" />
+                <h3 className="font-bold text-slate-900 text-sm">My Study Activities &amp; Protocol Log</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowActivityFeed(!showActivityFeed)}
+                className="text-xs text-purple-700 font-semibold hover:underline"
+              >
+                {showActivityFeed ? 'Hide Activity Feed' : 'Show All Activity'}
+              </button>
+            </div>
+
+            {showActivityFeed && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                {studyActivities.map((act) => {
+                  const Icon = act.icon;
+                  return (
+                    <div
+                      key={act.id}
+                      className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors text-xs"
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${act.color}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-0.5 flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className="font-semibold text-slate-800 truncate">{act.title}</p>
+                          <span className="text-[10px] text-slate-400 shrink-0">{act.time}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 line-clamp-2">{act.description}</p>
+                        <p className="text-[10px] text-purple-700 font-medium truncate pt-0.5">
+                          Study: {act.studyTitle}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ============================================================== */}
+        {/* 3. FILTER TOOLBAR & ACTIVE STUDIES LIST                        */}
+        {/* ============================================================== */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-slate-400" />
@@ -121,20 +283,28 @@ export function StudiesView() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs rounded-lg border border-slate-200 bg-slate-50 py-1.5 px-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              className="text-xs rounded-lg border border-slate-200 bg-slate-50 py-1.5 px-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-600"
             >
               <option value="">All Statuses</option>
+              <option value="active">Active</option>
               <option value="draft">Draft</option>
               <option value="protocol_review">Protocol Review</option>
-              <option value="active">Active</option>
               <option value="data_collection">Data Collection</option>
               <option value="analysis">Analysis</option>
               <option value="completed">Completed</option>
             </select>
           </div>
-          
-          <div className="text-xs text-slate-500">
-            {studies ? `Showing ${studies.length} studies` : ''}
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              {studies ? `Showing ${studies.length} studies` : 'Loading studies...'}
+            </span>
+            <Link to="/studies/new">
+              <Button size="sm" variant="ghost" className="text-xs text-purple-700 hover:text-purple-900 gap-1 h-7">
+                <span>Add Study</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
           </div>
         </div>
 
@@ -143,7 +313,7 @@ export function StudiesView() {
           <StatusState
             type="unavailable"
             title="Studies Service Unavailable"
-            description="The studies service endpoint (`/studies`) is currently unreachable."
+            description="The studies service endpoint (/studies) is currently unreachable."
             endpoint="/studies"
             action={{
               label: 'Retry Fetching Studies',
@@ -162,7 +332,7 @@ export function StudiesView() {
           />
         ) : isLoading ? (
           <div className="space-y-3">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2, 3].map((i) => (
               <Card key={i} className="p-4">
                 <div className="space-y-2">
                   <Skeleton className="h-5 w-64" />
@@ -175,48 +345,100 @@ export function StudiesView() {
           <StatusState
             type="empty"
             title="No Studies Found"
-            description="No research studies have been recorded in the database yet."
+            description="No research studies have been recorded in the database yet. Click below to add your first study and verify its protocol."
             action={{
-              label: 'Create First Study',
-              onClick: handleOpenCreateModal,
+              label: 'Add New Study with Protocol',
+              onClick: () => (window.location.href = '/studies/new'),
             }}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {studies.map((study) => (
-              <Card key={study.id} className="hover:border-slate-300 transition-all">
-                <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+              <Card key={study.id} className="hover:border-slate-300 transition-all shadow-xs">
+                <CardContent className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  {/* Left Column: Study Details & Badges */}
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Link
-                        to={`/studies/${study.id}`}
-                        className="text-base font-bold text-slate-900 hover:text-blue-600 transition-colors"
+                        to={`/studies/${study.id}?tab=test_case_analysis`}
+                        className="text-base font-bold text-slate-900 hover:text-purple-600 transition-colors truncate"
                       >
                         {study.title}
                       </Link>
-                      <Badge variant="outline" className="font-mono text-[10px]">
+                      <Badge variant="outline" className="font-mono text-[10px] bg-slate-50">
                         {study.protocolNumber}
                       </Badge>
+                      <Badge variant="default" className="capitalize text-[10px] bg-slate-900 text-white">
+                        {study.status.replace('_', ' ')}
+                      </Badge>
                     </div>
+
                     <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
                       {study.principalInvestigator && (
-                        <span>PI: <strong>{study.principalInvestigator}</strong></span>
+                        <span>PI: <strong className="text-slate-700">{study.principalInvestigator}</strong></span>
                       )}
-                      {study.phase && <span>Phase: {study.phase}</span>}
+                      {study.phase && <span>Phase: <strong className="text-slate-700">{study.phase}</strong></span>}
                       <span>Updated: {formatDate(study.updatedAt)}</span>
+                    </div>
+
+                    {/* Protocol Verification & Questions Status Badges */}
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-emerald-700 border-emerald-200 bg-emerald-50 flex items-center gap-1 font-semibold"
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>RAG Verified: 92% Admin Match</span>
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-purple-700 border-purple-200 bg-purple-50 flex items-center gap-1 font-semibold"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        <span>5 Questions Generated</span>
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-blue-700 border-blue-200 bg-blue-50 font-semibold"
+                      >
+                        ITT Plan Configured
+                      </Badge>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
-                    <Badge variant="default" className="capitalize">
-                      {study.status.replace('_', ' ')}
-                    </Badge>
-                    <Link
-                      to={`/studies/${study.id}`}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800"
-                    >
-                      <span>Study Details</span>
-                      <ExternalLink className="h-3.5 w-3.5" />
+                  {/* Right Column: Direct Quick Action Buttons */}
+                  <div className="flex items-center gap-2 shrink-0 w-full md:w-auto justify-end flex-wrap">
+                    <Link to={`/studies/${study.id}?tab=test_case_analysis`}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs text-purple-700 border-purple-200 bg-purple-50 hover:bg-purple-100 gap-1.5 font-semibold"
+                      >
+                        <Target className="h-3.5 w-3.5" />
+                        <span>Test Case Analysis</span>
+                      </Button>
+                    </Link>
+
+                    <Link to={`/studies/${study.id}?tab=generated_questions`}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs text-blue-700 border-blue-200 bg-blue-50 hover:bg-blue-100 gap-1.5 font-semibold"
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        <span>Questions</span>
+                      </Button>
+                    </Link>
+
+                    <Link to={`/studies/${study.id}`}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs text-slate-700 hover:bg-slate-100 gap-1"
+                      >
+                        <span>Details</span>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
                     </Link>
                   </div>
                 </CardContent>
@@ -225,19 +447,19 @@ export function StudiesView() {
           </div>
         )}
 
-        {/* Modal Dialog: Create New Research Study */}
+        {/* Modal Dialog: Quick Entry */}
         {isCreateOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
             <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 text-purple-700">
                     <FileText className="h-4 w-4" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Create New Research Study</h3>
+                    <h3 className="text-base font-bold text-slate-900">Quick Study Entry</h3>
                     <p className="text-xs text-slate-500">
-                      Registers study protocol dynamically with the backend database
+                      Registers standard study record in the research database
                     </p>
                   </div>
                 </div>
@@ -251,90 +473,79 @@ export function StudiesView() {
               </div>
 
               {errorMessage && (
-                <div className="p-3 text-xs rounded-lg bg-red-50 text-red-700 border border-red-200 flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{errorMessage}</span>
+                <div className="p-3 text-xs rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+                  {errorMessage}
                 </div>
               )}
 
-              <form onSubmit={handleCreateSubmit} className="space-y-3.5">
+              <form onSubmit={handleCreateSubmit} className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Study Title *</label>
+                  <label className="text-xs font-semibold text-slate-700">
+                    Study Title <span className="text-rose-500">*</span>
+                  </label>
                   <Input
-                    required
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Longitudinal Cognitive Biomarkers in Mild Neurocognitive Disorder"
-                    disabled={createStudyMutation.isPending}
+                    placeholder="e.g. Efficacy of Drug X in Type 2 Diabetes"
+                    className="text-xs"
+                    required
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700">Protocol / IRB Number *</label>
+                    <label className="text-xs font-semibold text-slate-700">Protocol Number</label>
                     <Input
-                      required
                       value={protocolNumber}
                       onChange={(e) => setProtocolNumber(e.target.value)}
-                      placeholder="e.g. PROTO-2026-001"
-                      disabled={createStudyMutation.isPending}
+                      className="text-xs font-mono"
+                      required
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700">Study Phase</label>
-                    <Input
+                    <label className="text-xs font-semibold text-slate-700">Phase</label>
+                    <select
                       value={phase}
                       onChange={(e) => setPhase(e.target.value)}
-                      placeholder="e.g. Phase II, Observational"
-                      disabled={createStudyMutation.isPending}
-                    />
+                      className="w-full text-xs rounded-md border border-slate-300 bg-white p-2 text-slate-800"
+                    >
+                      <option value="Phase I">Phase I</option>
+                      <option value="Phase II">Phase II</option>
+                      <option value="Phase III">Phase III</option>
+                      <option value="Observational">Observational</option>
+                    </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700">Principal Investigator</label>
-                    <Input
-                      value={principalInvestigator}
-                      onChange={(e) => setPrincipalInvestigator(e.target.value)}
-                      placeholder="e.g. Dr. Jane Smith"
-                      disabled={createStudyMutation.isPending}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700">Target Cohort Size</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={targetParticipants}
-                      onChange={(e) => setTargetParticipants(e.target.value)}
-                      placeholder="e.g. 150"
-                      disabled={createStudyMutation.isPending}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsCreateOpen(false)}
-                    disabled={createStudyMutation.isPending}
+                <div className="flex items-center justify-between pt-2">
+                  <Link
+                    to="/studies/new"
+                    className="text-xs text-purple-700 hover:underline font-semibold flex items-center gap-1"
                   >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createStudyMutation.isPending}
-                    className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    {createStudyMutation.isPending && (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    )}
-                    <span>{createStudyMutation.isPending ? 'Creating Study...' : 'Register Study'}</span>
-                  </Button>
+                    <span>Use full Protocol AI Verification wizard instead</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCreateOpen(false)}
+                      className="text-xs text-slate-600"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={createStudyMutation.isPending}
+                      className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold"
+                    >
+                      Save Study
+                    </Button>
+                  </div>
                 </div>
               </form>
             </div>

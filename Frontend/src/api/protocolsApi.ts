@@ -236,4 +236,21 @@ export const protocolsApi = {
     const response = await apiClient.post<CompleteStudyFlowResponse>('/protocols/complete-study-flow', payload);
     return response.data;
   },
+
+  /**
+   * Dynamically synthesizes assessment questions based on clinical protocol.
+   */
+  async generateQuestionsFromProtocol(payload: {
+    study_title: string;
+    description: string;
+    protocol_type?: string;
+    protocol_text?: string;
+    count?: number;
+  }): Promise<{ questions: ProtocolGeneratedQuestion[] }> {
+    const response = await apiClient.post<{ questions: ProtocolGeneratedQuestion[] }>(
+      '/protocols/generate-questions-from-protocol',
+      payload
+    );
+    return response.data;
+  },
 };

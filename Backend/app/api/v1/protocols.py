@@ -405,3 +405,33 @@ async def complete_study_flow(
         "protocol_number": study.protocol_number,
         "message": "Study created successfully with verified protocol and generated questions.",
     }
+
+
+class ProtocolQuestionGenRequest(BaseModel):
+    study_title: str
+    description: str
+    protocol_type: Optional[str] = "Clinical Protocol"
+    protocol_text: Optional[str] = None
+    count: Optional[int] = 5
+
+
+@router.post(
+    "/generate-questions-from-protocol",
+    status_code=status.HTTP_200_OK,
+    summary="Dynamically synthesize assessment questions based on clinical protocol",
+)
+async def generate_questions_from_protocol(
+    payload: ProtocolQuestionGenRequest,
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.protocol_rag_service import get_protocol_rag_service
+
+    svc = get_protocol_rag_service()
+    questions = await svc.generate_more_questions(
+        study_title=payload.study_title,
+        description=payload.description,
+        protocol_type=payload.protocol_type or "Clinical Protocol",
+        protocol_text=payload.protocol_text,
+        count=payload.count or 5,
+    )
+    return {"questions": questions}
