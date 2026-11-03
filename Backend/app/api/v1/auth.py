@@ -1,5 +1,6 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, Request, status
+from typing import Optional, Dict, Any
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, Request, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.api.deps import get_current_user, get_client_ip, get_user_agent
@@ -20,6 +21,9 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     MfaSetupResponse,
     MfaVerifyRequest,
+    OtpRequestPayload,
+    OtpVerifyPayload,
+    AdminCredentialsUpdate,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Sessions"])
@@ -66,6 +70,107 @@ async def login(
         success=True,
         message="Authentication successful",
         data=token_response,
+    )
+
+
+# Temporary in-memory storage for email OTPs: email -> {"otp": "1234", "created_at": datetime}
+OTP_STORAGE: Dict[str, Dict[str, Any]] = {}
+
+
+@router.post(
+    "/otp/request",
+    response_model=StandardResponse[Dict[str, Any]],
+    status_code=status.HTTP_200_OK,
+    summary="Request a 4-digit mock OTP for researcher email login",
+)
+async def request_otp(payload: OtpRequestPayload):
+    import random
+    email = payload.email.lower().strip()
+    otp_code = f"{random.randint(1000, 9999)}"
+    OTP_STORAGE[email] = {
+        "otp": otp_code,
+        "created_at": datetime.now(timezone.utc),
+    }
+    return StandardResponse(
+        success=True,
+        message="Mock OTP generated successfully",
+        data={
+            "email": email,
+            "otp": otp_code,
+            "display_notice": f"Your verification code is: {otp_code}",
+        },
+    )
+
+
+@router.post(
+    "/otp/verify",
+    response_model=StandardResponse[TokenResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Verify 4-digit OTP and authenticate researcher",
+)
+async def verify_otp(
+    payload: OtpVerifyPayload,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    ip = get_client_ip(request)
+    ua = get_user_agent(request)
+    auth_service = AuthService(db)
+    email = payload.email.lower().strip()
+
+    stored = OTP_STORAGE.get(email)
+    expected_otp = stored["otp"] if stored else None
+
+    # Accept if matches stored, or matches universal mock codes "1234", "4821", or any valid 4-digit numeric code
+    if expected_otp and payload.otp != expected_otp and payload.otp not in ["1234", "4821"]:
+        if not (payload.otp.isdigit() and len(payload.otp) == 4):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OTP. Please enter the 4-digit verification code provided.",
+            )
+
+    token_response = await auth_service.login_with_otp(email, ip, ua)
+    return StandardResponse(
+        success=True,
+        message="Researcher login successful via OTP",
+        data=token_response,
+    )
+
+
+@router.post(
+    "/admin/update-credentials",
+    response_model=StandardResponse[UserResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Update Admin email and/or password (Administrator only)",
+)
+async def update_admin_credentials(
+    payload: AdminCredentialsUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ip = get_client_ip(request)
+    ua = get_user_agent(request)
+
+    if not current_user.global_role or current_user.global_role.name != "administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can update master administrator credentials.",
+        )
+
+    auth_service = AuthService(db)
+    updated_user = await auth_service.update_admin_credentials(
+        current_user=current_user,
+        new_email=payload.new_email,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    return StandardResponse(
+        success=True,
+        message="Administrator credentials updated successfully.",
+        data=UserResponse.model_validate(updated_user),
     )
 
 

@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi, LoginCredentials } from '@/api/authApi';
 import { ApiErrorDetail } from '@/lib/axios';
+import { adminAuthStore } from '@/lib/adminAuthStore';
 
 export const AUTH_QUERY_KEY = ['auth', 'currentUser'];
 
@@ -14,8 +15,8 @@ export function useAuth() {
     if (!token && typeof window !== 'undefined' && sessionStorage.getItem('logged_out') !== 'true') {
       authApi
         .login({
-          email: 'admin@airesearchflow.org',
-          password: 'AdminPassword123!',
+          email: adminAuthStore.getAdminEmail(),
+          password: adminAuthStore.getAdminPassword(),
         })
         .then((res) => {
           queryClient.setQueryData(AUTH_QUERY_KEY, res.user);
@@ -51,6 +52,14 @@ export function useAuth() {
     },
   });
 
+  const otpLoginMutation = useMutation({
+    mutationFn: (payload: { email: string; otp: string }) => authApi.loginWithOtp(payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(AUTH_QUERY_KEY, data.user);
+      queryClient.invalidateQueries();
+    },
+  });
+
   const logoutMutation = useMutation({
     mutationFn: authApi.logout,
     onSuccess: () => {
@@ -68,7 +77,8 @@ export function useAuth() {
     isUnavailable: Boolean(apiError?.isUnavailable),
     refetchUser: refetch,
     login: loginMutation.mutateAsync,
+    loginWithOtp: otpLoginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
-    isLoggingIn: loginMutation.isPending,
+    isLoggingIn: loginMutation.isPending || otpLoginMutation.isPending,
   };
 }

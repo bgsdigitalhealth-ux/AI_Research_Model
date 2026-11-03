@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Default Master Administrator Credentials
+    DEFAULT_ADMIN_EMAIL: str = "info@acudigiverse.com"
+    DEFAULT_ADMIN_PASSWORD: str = "Apple9844?"
+
     # CORS
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

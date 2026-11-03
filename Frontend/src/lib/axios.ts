@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { adminAuthStore } from './adminAuthStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT) || 120000;
@@ -36,8 +37,8 @@ async function getOrInitAuthToken(): Promise<string | null> {
   if (!authInitPromise) {
     authInitPromise = axios
       .post(`${API_BASE_URL}/auth/login`, {
-        email: 'admin@airesearchflow.org',
-        password: 'AdminPassword123!',
+        email: adminAuthStore.getAdminEmail(),
+        password: adminAuthStore.getAdminPassword(),
       })
       .then((res) => {
         const body = res.data;

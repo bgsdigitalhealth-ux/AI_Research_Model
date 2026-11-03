@@ -62,3 +62,18 @@ class MfaSetupResponse(BaseSchema):
 class MfaVerifyRequest(BaseSchema):
     code: str = Field(..., min_length=6, max_length=6)
     temp_token: Optional[str] = None
+
+
+class OtpRequestPayload(BaseSchema):
+    email: EmailStr
+
+
+class OtpVerifyPayload(BaseSchema):
+    email: EmailStr
+    otp: str = Field(..., min_length=4, max_length=6)
+
+
+class AdminCredentialsUpdate(BaseSchema):
+    new_email: Optional[EmailStr] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None

@@ -12,6 +12,7 @@ import {
   AlertCircle 
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { adminAuthStore } from '@/lib/adminAuthStore';
 
 export function UserProfile() {
   const { user, isAuthenticated, isLoading, isUnavailable, login, logout, isLoggingIn } = useAuth();
@@ -165,11 +166,11 @@ export function UserProfile() {
                     size="sm"
                     className="w-full text-xs text-blue-600 hover:bg-blue-50"
                     onClick={() => {
-                      setEmail('admin@airesearchflow.org');
-                      setPassword('AdminPassword123!');
+                      setEmail(adminAuthStore.getAdminEmail());
+                      setPassword(adminAuthStore.getAdminPassword());
                     }}
                   >
-                    Use Admin Test Account (admin@airesearchflow.org)
+                    Use Admin Account ({adminAuthStore.getAdminEmail()})
                   </Button>
                 </div>
               </form>

@@ -14,6 +14,9 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     MfaSetupResponse,
     MfaVerifyRequest,
+    OtpRequestPayload,
+    OtpVerifyPayload,
+    AdminCredentialsUpdate,
 )
 from app.schemas.study_membership import StudyMembershipCreate, StudyMembershipResponse
 from app.schemas.study import (

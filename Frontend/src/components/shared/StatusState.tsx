@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { authApi } from '@/api/authApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { AUTH_QUERY_KEY } from '@/hooks/useAuth';
+import { adminAuthStore } from '@/lib/adminAuthStore';
 
 export interface StatusStateProps {
   type: 'loading' | 'unavailable' | 'error' | 'empty' | 'access-denied';
@@ -113,7 +114,10 @@ export function StatusState({
       const handleQuickLogin = async () => {
         setIsQuickLoggingIn(true);
         try {
-          const res = await authApi.login({ email: 'admin@airesearchflow.org', password: 'AdminPassword123!' });
+          const res = await authApi.login({
+            email: adminAuthStore.getAdminEmail(),
+            password: adminAuthStore.getAdminPassword(),
+          });
           queryClient.setQueryData(AUTH_QUERY_KEY, res.user);
           queryClient.invalidateQueries();
           if (effectiveAction) {
