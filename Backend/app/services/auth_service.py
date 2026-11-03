@@ -619,27 +619,39 @@ class AuthService:
         rate_key = f"{ip_address or 'unknown'}_{email_clean}"
         auth_rate_limiter.clear(rate_key)
 
-        study_roles = await self.study_repo.get_user_study_roles(user.id)
-        role_name = user.global_role.name if user.global_role else "researcher"
+        user_with_relations = await self.user_repo.get_by_id_with_relations(user.id)
+        if not user_with_relations:
+            user_with_relations = user
+
+        memberships = await self.study_repo.list_user_study_memberships(user.id)
+        study_roles = {str(m.study_id): m.role.name for m in memberships}
+        role_name = (
+            user_with_relations.global_role.name
+            if user_with_relations.global_role
+            else "researcher"
+        )
 
         access_token = create_access_token(
             subject=str(user.id),
             global_role=role_name,
-            study_roles={str(k): v for k, v in study_roles.items()},
+            study_roles=study_roles,
         )
-        raw_refresh, hashed_refresh = create_refresh_token()
-        session_expires = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        raw_refresh, refresh_hash, refresh_expires_at = create_refresh_token(subject=str(user.id))
 
-        await self.session_repo.create_session(
+        await self.session_repo.create(
             user_id=user.id,
-            hashed_token=hashed_refresh,
+            token_hash=refresh_hash,
             ip_address=ip_address,
             user_agent=user_agent,
-            expires_at=session_expires,
+            expires_at=refresh_expires_at,
+            is_revoked=False,
+            last_used_at=datetime.now(timezone.utc),
         )
 
-        user.last_login_at = datetime.now(timezone.utc)
-        await self.session.commit()
+        await self.user_repo.update(
+            user.id,
+            last_login_at=datetime.now(timezone.utc),
+        )
 
         await self.audit_repo.log_event(
             event_type="auth.otp_login",
@@ -650,7 +662,6 @@ class AuthService:
             details={"email": user.email, "method": "mock_otp"},
         )
 
-        user_with_relations = await self.user_repo.get_by_id_with_relations(user.id) or user
         return TokenResponse(
             access_token=access_token,
             refresh_token=raw_refresh,
