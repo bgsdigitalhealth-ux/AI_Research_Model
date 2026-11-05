@@ -60,6 +60,9 @@ export function FloatingChatbotWidget() {
   const [historyItems, setHistoryItems] = useState<ConversationHistoryItem[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [showArchitectureModal, setShowArchitectureModal] = useState(false);
+  const [hfKeyInput, setHfKeyInput] = useState('');
+  const [isSavingHfKey, setIsSavingHfKey] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -239,6 +242,37 @@ export function FloatingChatbotWidget() {
       title: 'Report Downloaded',
       description: 'Conversation summary saved as Markdown document.',
     });
+  };
+
+  // Configure and Save Hugging Face API Token to .env
+  const handleSaveHfKey = async () => {
+    if (!hfKeyInput.trim() || !hfKeyInput.trim().startsWith('hf_')) {
+      toast({
+        title: 'Invalid Hugging Face Token',
+        description: 'Please enter a valid Hugging Face User Access Token starting with "hf_".',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      setIsSavingHfKey(true);
+      await chatbotApi.configureHuggingFace(hfKeyInput.trim());
+      toast({
+        title: 'Hugging Face API Configured',
+        description: 'Hugging Face token saved to .env and activated for Meta Llama & Embeddings.',
+      });
+      setHfKeyInput('');
+      setShowArchitectureModal(false);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Failed to save Hugging Face API key.';
+      toast({
+        title: 'Configuration Error',
+        description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingHfKey(false);
+    }
   };
 
   // Parse structured sections: Key Details, Inclusion/Exclusion Criteria, Text
@@ -890,35 +924,171 @@ export function FloatingChatbotWidget() {
                 </div>
               </div>
 
-              {/* 4. Powered by RAG + LangGraph Dark Box (From Mockup) */}
-              <div className="mt-4 p-3.5 rounded-2xl bg-[#0f172a] text-white space-y-2 shadow-md">
+              {/* 4. Powered by RAG + LangGraph + Hugging Face Dark Box (From Architecture) */}
+              <div className="mt-4 p-3.5 rounded-2xl bg-[#0f172a] text-white space-y-2.5 shadow-md">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold tracking-tight text-white">
-                    Powered by RAG + LangGraph
+                  <span className="text-[11px] font-bold tracking-tight text-white flex items-center gap-1.5">
+                    <span>RAG · LangGraph · Hugging Face</span>
                   </span>
-                  <div className="w-5 h-5 rounded-md bg-purple-600/30 text-purple-400 flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchitectureModal(true)}
+                    title="View System Architecture & Hugging Face Config"
+                    className="w-5 h-5 rounded-md bg-purple-600/30 hover:bg-purple-600/50 text-purple-400 hover:text-white flex items-center justify-center transition-colors"
+                  >
                     <Layers className="h-3.5 w-3.5" />
-                  </div>
+                  </button>
                 </div>
                 <div className="space-y-1 text-[10px] text-slate-300">
                   <div className="flex items-center gap-1.5">
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    <span>Semantic Search</span>
+                    <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                    <span>Ingestion: Hugging Face + Pinecone</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    <span>Context Aware</span>
+                    <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                    <span>RAG Engine: LangChain &amp; LangGraph</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    <span>Source Cited</span>
+                    <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                    <span>LLM Layer: Meta Llama 3 &amp; GPT-4o</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    <span>Agentic Reasoning</span>
+                    <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                    <span>Source Citations &amp; Actionable Insights</span>
                   </div>
                 </div>
+                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[9px] text-purple-300">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchitectureModal(true)}
+                    className="hover:underline flex items-center gap-1 text-purple-300 hover:text-white transition-colors"
+                  >
+                    <span>System Architecture &amp; HF Token</span>
+                    <ArrowRight className="h-2.5 w-2.5" />
+                  </button>
+                </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 3. SYSTEM ARCHITECTURE & HUGGING FACE MODAL (From Image)       */}
+      {/* ============================================================== */}
+      {showArchitectureModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                  <Layers className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    System Architecture &amp; Hugging Face Configuration
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    RAG + LangGraph + Hugging Face + Pinecone + Meta Llama / GPT
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowArchitectureModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Architecture Pipeline Flow Visual (Matching Mockup Image) */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3 text-xs">
+              <p className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                End-to-End Pipeline Overview:
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[10px]">
+                <div className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1">
+                  <div className="font-bold text-purple-700">1. Data Sources</div>
+                  <p className="text-slate-500 text-[9px]">Admin Protocols, Study Documents, Test Cases</p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1">
+                  <div className="font-bold text-indigo-700">2. Ingestion</div>
+                  <p className="text-slate-500 text-[9px]">Hugging Face Embeddings → Pinecone Vector DB</p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1">
+                  <div className="font-bold text-blue-700">3. RAG Engine</div>
+                  <p className="text-slate-500 text-[9px]">LangChain + LangGraph Multi-Agent Routing</p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1">
+                  <div className="font-bold text-amber-700">4. LLM Layer</div>
+                  <p className="text-slate-500 text-[9px]">Meta Llama 3 (Hugging Face) &amp; OpenAI GPT-4o</p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1">
+                  <div className="font-bold text-emerald-700">5. Responses</div>
+                  <p className="text-slate-500 text-[9px]">Accurate Answers, Source Citations, Actions</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Hugging Face API Key Configuration Form */}
+            <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🤗</span>
+                <div>
+                  <h4 className="text-xs font-bold text-purple-950">Hugging Face API Token Configuration</h4>
+                  <p className="text-[11px] text-purple-700">
+                    Add your Hugging Face User Access Token (from{' '}
+                    <a
+                      href="https://huggingface.co/settings/tokens"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-semibold hover:text-purple-900"
+                    >
+                      huggingface.co/settings/tokens
+                    </a>
+                    ) to store directly in <code>.env</code>:
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="password"
+                  value={hfKeyInput}
+                  onChange={(e) => setHfKeyInput(e.target.value)}
+                  placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  className="flex-1 rounded-xl border border-purple-300 bg-white px-3 py-2 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSaveHfKey}
+                  disabled={!hfKeyInput.trim() || isSavingHfKey}
+                  className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-4"
+                >
+                  {isSavingHfKey ? 'Saving...' : 'Save Token'}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-600 pt-1">
+                <div>
+                  <strong className="text-slate-700">Configured LLM Model:</strong> <code>meta-llama/Meta-Llama-3-8B-Instruct</code>
+                </div>
+                <div>
+                  <strong className="text-slate-700">Embeddings Model:</strong> <code>sentence-transformers/all-MiniLM-L6-v2</code>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowArchitectureModal(false)}
+                className="text-xs text-slate-600"
+              >
+                Close
+              </Button>
             </div>
           </div>
         </div>

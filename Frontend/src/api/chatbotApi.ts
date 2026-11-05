@@ -65,6 +65,12 @@ export interface ChatbotStatusResponse {
     namespace: string;
     status: string;
   };
+  huggingface?: {
+    configured: boolean;
+    model: string;
+    embedding_model: string;
+    status: string;
+  };
   langgraph: {
     available: boolean;
     architecture: string;
@@ -75,6 +81,13 @@ export interface ChatbotStatusResponse {
     huggingface_embeddings: string;
     reasoning_mode: string;
     status: string;
+  };
+  architecture?: {
+    data_sources: string[];
+    ingestion_layer: string[];
+    rag_engine: string[];
+    llm_layer: string[];
+    tech_stack: string[];
   };
   features: string[];
 }
@@ -87,6 +100,14 @@ export const chatbotApi = {
 
   async getStatus(): Promise<ChatbotStatusResponse> {
     const response = await apiClient.get<{ data: ChatbotStatusResponse }>('/chatbot/status');
+    return response.data.data;
+  },
+
+  async configureHuggingFace(apiKey: string, model?: string): Promise<any> {
+    const response = await apiClient.post<{ data: any }>('/chatbot/configure-huggingface', {
+      api_key: apiKey,
+      model,
+    });
     return response.data.data;
   },
 

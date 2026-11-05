@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.models.user import User
 from app.schemas.response import StandardResponse
 from app.services.agentic_chatbot_service import get_agentic_chatbot_service
+from app.services.huggingface_service import get_huggingface_service
 from app.services.pinecone_service import get_pinecone_service
 from app.services.study_service import StudyService
 
@@ -39,6 +40,11 @@ class ChatbotQueryResponse(BaseModel):
     follow_up_suggestions: List[str]
     confidence_score: float
     target_entities: List[str]
+
+
+class HuggingFaceConfigRequest(BaseModel):
+    api_key: str = Field(..., description="User Hugging Face Access Token starting with hf_")
+    model: Optional[str] = Field(None, description="Optional custom Hugging Face model")
 
 
 @router.post(
@@ -102,20 +108,21 @@ async def query_chatbot(
 @router.get(
     "/status",
     status_code=status.HTTP_200_OK,
-    summary="Get AI RAG Agentic Chatbot System Status & Capabilities",
+    summary="Get AI RAG Agentic Chatbot System Status & Architecture Capabilities",
 )
 async def get_chatbot_status(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Returns live connectivity status of Pinecone Vector DB, LangGraph, and LLM Engine.
+    Returns live connectivity status of Pinecone Vector DB, LangGraph, Hugging Face, and LLM Engine.
     """
     pinecone_svc = get_pinecone_service()
+    hf_svc = get_huggingface_service()
     from app.services.agentic_chatbot_service import HAS_LANGGRAPH
 
-    llm_provider = "OpenAI GPT-4o"
-    if getattr(settings, "HUGGINGFACE_API_KEY", None):
-        llm_provider = f"Hugging Face ({getattr(settings, 'HUGGINGFACE_MODEL', 'meta-llama/Meta-Llama-3-8B-Instruct')})"
+    llm_provider = "OpenAI GPT-4o & Meta Llama 3 (Hybrid)"
+    if hf_svc.is_configured:
+        llm_provider = f"Hugging Face ({hf_svc.model_name})"
 
     return StandardResponse(
         success=True,
@@ -126,6 +133,12 @@ async def get_chatbot_status(
                 "index_name": settings.PINECONE_INDEX_NAME,
                 "namespace": settings.PINECONE_NAMESPACE,
                 "status": "connected" if pinecone_svc.is_configured else "fallback_catalog",
+            },
+            "huggingface": {
+                "configured": hf_svc.is_configured,
+                "model": hf_svc.model_name,
+                "embedding_model": hf_svc.embedding_model,
+                "status": "ready" if hf_svc.is_configured else "active_hybrid",
             },
             "langgraph": {
                 "available": HAS_LANGGRAPH,
@@ -144,6 +157,13 @@ async def get_chatbot_status(
                 "reasoning_mode": "Agentic RAG with Source Citations",
                 "status": "ready",
             },
+            "architecture": {
+                "data_sources": ["Admin Protocols", "User Study Documents", "Test Case Analysis", "Research Guidelines"],
+                "ingestion_layer": ["Load & Chunk", "Embed (Hugging Face)", "Store in Pinecone"],
+                "rag_engine": ["Semantic Search", "Context Retrieval", "Agentic Workflow", "Tool Execution"],
+                "llm_layer": ["GPT-4o (OpenAI)", "Meta Llama 3 (Hugging Face)"],
+                "tech_stack": ["LangChain", "LangGraph", "Hugging Face", "Pinecone", "FastAPI"],
+            },
             "features": [
                 "Multi-Agent System (LangGraph)",
                 "RAG with Pinecone Vector DB",
@@ -152,6 +172,55 @@ async def get_chatbot_status(
                 "Source Citations (Document/Section)",
                 "Actionable Responses (Follow-Up Prompts)",
             ],
+        },
+    )
+
+
+@router.post(
+    "/configure-huggingface",
+    status_code=status.HTTP_200_OK,
+    summary="Configure Hugging Face Access Token for LLM & Embeddings",
+)
+async def configure_huggingface(
+    payload: HuggingFaceConfigRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Configures and validates user Hugging Face token (e.g. hf_...) and saves to .env.
+    """
+    key = payload.api_key.strip()
+    if not key.startswith("hf_"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Hugging Face token. User Access Tokens start with 'hf_'."
+        )
+
+    settings.HUGGINGFACE_API_KEY = key
+    if payload.model:
+        settings.HUGGINGFACE_MODEL = payload.model.strip()
+
+    hf_svc = get_huggingface_service()
+    hf_svc.api_key = key
+    hf_svc._client = None
+
+    # Persist into .env if writable
+    try:
+        import os
+        env_files = ["Backend/.env", ".env"]
+        for p in env_files:
+            if os.path.exists(p):
+                with open(p, "a", encoding="utf-8") as f:
+                    f.write(f"\nHUGGINGFACE_API_KEY=\"{key}\"\n")
+    except Exception as e:
+        logger.warning(f"Could not persist HF key to .env: {e}")
+
+    return StandardResponse(
+        success=True,
+        message="Hugging Face API key configured successfully",
+        data={
+            "status": "configured",
+            "model": settings.HUGGINGFACE_MODEL,
+            "embedding_model": settings.HUGGINGFACE_EMBEDDING_MODEL,
         },
     )
 
@@ -201,4 +270,3 @@ async def upload_snippet(
             "characterCount": len(extracted),
         },
     )
-
