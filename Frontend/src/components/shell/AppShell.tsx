@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
 import { Toaster } from '@/components/ui/toaster';
+import { FloatingChatbotWidget } from '@/features/chatbot/FloatingChatbotWidget';
 
 export function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -38,6 +39,9 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      {/* Global AI RAG Agentic Chatbot (Bottom Right Floating) */}
+      <FloatingChatbotWidget />
 
       {/* Global Toast System */}
       <Toaster />

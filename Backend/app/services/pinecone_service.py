@@ -2,7 +2,12 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 import httpx
-from pinecone import Pinecone
+try:
+    from pinecone import Pinecone
+    HAS_PINECONE = True
+except (ImportError, Exception):
+    HAS_PINECONE = False
+    Pinecone = None
 from app.core.config import settings
 
 logger = logging.getLogger("ai_research_flow.pinecone_service")
@@ -259,7 +264,7 @@ class PineconeVectorService:
         """
         Lazily initializes the official Pinecone client and index connection.
         """
-        if self._index is None and self.is_configured:
+        if self._index is None and self.is_configured and HAS_PINECONE:
             try:
                 self._pc = Pinecone(api_key=self.api_key)
                 self._index = self._pc.Index(self.index_name)

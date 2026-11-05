@@ -3,7 +3,6 @@ import { QuickActionsBar } from './components/QuickActionsBar';
 import { MetricsGrid } from './components/MetricsGrid';
 import { StudyStatusSummarySection } from './components/StudyStatusSummarySection';
 import { RecentStudiesTable } from './components/RecentStudiesTable';
-import { AiAssistantWidget } from './components/AiAssistantWidget';
 
 export function DashboardView() {
   return (
@@ -13,9 +12,6 @@ export function DashboardView() {
       breadcrumbs={[{ label: 'Dashboard', isCurrent: true }]}
     >
       <div className="space-y-6">
-        {/* Conditional AI Assistant Entry point */}
-        <AiAssistantWidget />
-
         {/* Quick Action Navigation Buttons */}
         <QuickActionsBar />
 

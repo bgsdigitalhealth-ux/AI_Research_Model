@@ -1,4 +1,5 @@
 import base64
+import os
 from typing import Any, List, Optional
 from pydantic import AnyHttpUrl, EmailStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -100,13 +101,18 @@ class Settings(BaseSettings):
     ]
 
     # AI Provider Adapter Configuration
-    AI_PROVIDER: str = "openai"  # Options: "gemini", "openai", "unconfigured"
+    AI_PROVIDER: str = "openai"  # Options: "gemini", "openai", "huggingface", "unconfigured"
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-1.5-pro"
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"
     AI_DATA_TRANSMISSION_POLICY_APPROVED: bool = True
     AI_STRIP_PARTICIPANT_IDENTIFIERS: bool = True
+
+    # Hugging Face Configuration (RAG Embeddings & LLM Inference)
+    HUGGINGFACE_API_KEY: Optional[str] = None
+    HUGGINGFACE_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    HUGGINGFACE_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # Pinecone Vector Database Configuration (Semantic Search & Question Generation)
     PINECONE_API_KEY: Optional[str] = (
@@ -139,6 +145,8 @@ class Settings(BaseSettings):
                 self.OPENAI_API_KEY = base64.b64decode(_OAI_FALLBACK.encode()).decode()
             except Exception:
                 pass
+        if not self.HUGGINGFACE_API_KEY:
+            self.HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY") or os.environ.get("HF_TOKEN")
 
 
 
