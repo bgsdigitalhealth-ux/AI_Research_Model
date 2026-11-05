@@ -20,3 +20,4 @@ export function useChatbotQuery() {
     mutationFn: (payload: ChatbotQueryPayload) => chatbotApi.query(payload),
   });
 }
+
