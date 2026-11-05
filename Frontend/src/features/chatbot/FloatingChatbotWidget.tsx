@@ -107,9 +107,12 @@ export function FloatingChatbotWidget() {
 
   // Handle Send Query
   const handleSendMessage = async (textToSend?: string) => {
-    const text = (textToSend || inputMessage).trim();
-    if (!text || chatbotMutation.isPending) return;
+    const rawText = (textToSend || inputMessage).trim();
+    const activeSnippet = attachedSnippet;
 
+    if ((!rawText && !activeSnippet) || chatbotMutation.isPending) return;
+
+    const text = rawText || (activeSnippet ? `Extract and analyze the attached document: ${activeSnippet.fileName}` : '');
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMsgId = `user-${Date.now()}`;
     const userMsg: ChatMessage = {
@@ -117,11 +120,20 @@ export function FloatingChatbotWidget() {
       role: 'user',
       content: text,
       timestamp: currentTime,
+      attachment: activeSnippet
+        ? {
+            fileName: activeSnippet.fileName,
+            fileType: activeSnippet.fileType,
+            characterCount: activeSnippet.characterCount,
+            previewUrl: activeSnippet.previewUrl,
+          }
+        : undefined,
     };
 
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInputMessage('');
+    setAttachedSnippet(null); // Clear active snippet so it's not permanently stuck in the bottom input bar
 
     // Prepare API history
     const historyPayload = messages.slice(-4).map((m) => ({
@@ -134,7 +146,8 @@ export function FloatingChatbotWidget() {
         message: text,
         study_id: selectedStudyId || null,
         history: historyPayload,
-        attached_snippet: attachedSnippet?.text || null,
+        attached_snippet: activeSnippet?.text || (activeSnippet ? `[Attached File: ${activeSnippet.fileName}]` : null),
+        attached_file_name: activeSnippet?.fileName || null,
       });
 
       const assistantMsg: ChatMessage = {
@@ -347,8 +360,8 @@ export function FloatingChatbotWidget() {
         <div
           className={`fixed bottom-6 right-6 z-50 flex flex-col rounded-2xl border border-slate-300 bg-white shadow-2xl transition-all duration-300 overflow-hidden ${
             isExpanded
-              ? 'w-[92vw] max-w-[700px] h-[82vh] max-h-[800px]'
-              : 'w-[420px] max-w-[calc(100vw-2rem)] h-[580px] max-h-[82vh]'
+              ? 'w-[92vw] max-w-[720px] h-[82vh] max-h-[800px]'
+              : 'w-[450px] max-w-[calc(100vw-1.5rem)] h-[590px] max-h-[82vh]'
           }`}
         >
           {/* Top Header Bar (High-Contrast Gradient with Title & Controls) */}
@@ -362,7 +375,7 @@ export function FloatingChatbotWidget() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs sm:text-sm font-bold tracking-tight text-white truncate">
+                  <h3 className="text-xs sm:text-sm font-bold tracking-tight text-white shrink-0 whitespace-nowrap">
                     ProtocolAI Assistant
                   </h3>
                   <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-300/40 text-[9px] font-semibold text-emerald-200 flex items-center gap-1 shrink-0">
@@ -381,7 +394,7 @@ export function FloatingChatbotWidget() {
                   value={selectedStudyId}
                   onChange={(e) => setSelectedStudyId(e.target.value)}
                   title="Active study context for AI retrieval"
-                  className="bg-white/15 hover:bg-white/25 text-white text-[10px] font-medium rounded-lg px-2 py-1 border border-white/25 focus:outline-none max-w-[130px] truncate cursor-pointer transition-colors"
+                  className="bg-white/15 hover:bg-white/25 text-white text-[10px] font-medium rounded-lg px-2 py-1 border border-white/25 focus:outline-none max-w-[110px] truncate cursor-pointer transition-colors"
                 >
                   {studies.map((s) => (
                     <option key={s.id} value={s.id} className="text-slate-900 bg-white">
@@ -448,6 +461,18 @@ export function FloatingChatbotWidget() {
                     /* User Message Bubble */
                     <div className="flex items-end justify-end gap-2">
                       <div className="flex flex-col items-end max-w-[85%]">
+                        {/* Attached File Chip if present */}
+                        {msg.attachment && (
+                          <div className="mb-1 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-[11px] text-indigo-950 shadow-2xs">
+                            <FileText className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                            <span className="font-semibold text-slate-800 truncate max-w-[180px]">
+                              {msg.attachment.fileName}
+                            </span>
+                            <span className="text-[9px] text-indigo-500 font-bold uppercase">
+                              {msg.attachment.fileType}
+                            </span>
+                          </div>
+                        )}
                         <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-sm bg-indigo-600 text-white text-xs shadow-sm leading-relaxed whitespace-pre-wrap">
                           {msg.content}
                         </div>
@@ -760,7 +785,7 @@ export function FloatingChatbotWidget() {
                     handleSendMessage();
                   }
                 }}
-                placeholder="Ask a question about your protocol or study..."
+                placeholder={attachedSnippet ? `Ask a question about ${attachedSnippet.fileName}...` : "Ask a question about your protocol or study..."}
                 className="flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all"
               />
 
@@ -769,7 +794,7 @@ export function FloatingChatbotWidget() {
                 type="button"
                 size="sm"
                 onClick={() => handleSendMessage()}
-                disabled={!inputMessage.trim() || chatbotMutation.isPending}
+                disabled={(!inputMessage.trim() && !attachedSnippet) || chatbotMutation.isPending}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-8.5 w-8.5 p-0 flex items-center justify-center shrink-0 disabled:opacity-40 shadow-xs transition-colors"
               >
                 <Send className="h-4 w-4" />

@@ -25,6 +25,12 @@ export interface ChatMessage {
   followUpSuggestions?: string[];
   confidenceScore?: number;
   targetEntities?: string[];
+  attachment?: {
+    fileName: string;
+    fileType: string;
+    characterCount?: number;
+    previewUrl?: string | null;
+  };
 }
 
 export interface ChatbotQueryPayload {
@@ -32,6 +38,7 @@ export interface ChatbotQueryPayload {
   study_id?: string | null;
   history?: Array<{ role: string; content: string }>;
   attached_snippet?: string | null;
+  attached_file_name?: string | null;
 }
 
 export interface ChatbotQueryResponse {

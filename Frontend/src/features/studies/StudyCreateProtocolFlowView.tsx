@@ -433,7 +433,7 @@ export function StudyCreateProtocolFlowView() {
 
               {/* Description */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">
+                <label className="block text-xs font-semibold text-slate-700">
                   Description <span className="text-rose-500">*</span>
                 </label>
                 <textarea
@@ -442,20 +442,20 @@ export function StudyCreateProtocolFlowView() {
                   placeholder="A clinical study to evaluate the safety and efficacy of Drug X in improving glycemic control in adults with Type 2 Diabetes."
                   rows={3}
                   required
-                  className="bg-white border-slate-300 text-sm resize-none"
+                  className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none transition-all shadow-xs"
                 />
               </div>
 
               {/* Protocol Type & Upload Protocol */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700">
+                  <label className="block text-xs font-semibold text-slate-700">
                     Protocol Type <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={protocolType}
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setProtocolType(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-xs"
                   >
                     <option value="Clinical Protocol">Clinical Protocol</option>
                     <option value="Observational Study">Observational Study</option>
@@ -465,17 +465,17 @@ export function StudyCreateProtocolFlowView() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700">
+                  <label className="block text-xs font-semibold text-slate-700">
                     Upload Protocol <span className="text-rose-500">*</span>
                   </label>
 
                   {fileName ? (
-                    <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-rose-500 shrink-0" />
-                        <div>
-                          <p className="font-semibold text-slate-800 truncate max-w-[180px]">{fileName}</p>
-                          <p className="text-[10px] text-slate-500">{fileSize}</p>
+                    <div className="flex items-center justify-between h-10 px-3 rounded-md border border-slate-200 bg-slate-50 text-xs shadow-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-rose-500 shrink-0" />
+                        <div className="flex items-center gap-2 truncate">
+                          <p className="font-semibold text-slate-800 truncate max-w-[170px]">{fileName}</p>
+                          <span className="text-[10px] text-slate-400 shrink-0">({fileSize})</span>
                         </div>
                       </div>
                       <button
@@ -484,13 +484,14 @@ export function StudyCreateProtocolFlowView() {
                           setFileName('');
                           setFileSize('');
                         }}
-                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-slate-200"
+                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-slate-200 transition-colors ml-2"
+                        title="Remove file"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ) : (
-                    <label className="flex items-center justify-center gap-2 h-10 px-3 rounded-md border border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 cursor-pointer text-xs text-slate-600 font-medium">
+                    <label className="flex items-center justify-center gap-2 h-10 px-3 rounded-md border border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 cursor-pointer text-xs text-slate-600 font-medium transition-colors shadow-xs">
                       <Upload className="h-4 w-4 text-purple-600" />
                       <span>Choose PDF / DOCX file</span>
                       <input type="file" accept=".pdf,.docx,.doc" onChange={handleFileChange} className="hidden" />
