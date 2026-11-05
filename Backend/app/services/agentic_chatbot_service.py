@@ -447,28 +447,21 @@ GROUNDED KNOWLEDGE CONTEXT (FROM PINECONE & PROTOCOLS):
     final_text: Optional[str] = None
     provider_used = "OpenAI GPT-4o"
 
-    # Attempt 1: Hugging Face Inference API if configured
-    hf_key = getattr(settings, "HUGGINGFACE_API_KEY", None)
-    if hf_key:
-        try:
-            hf_model = getattr(settings, "HUGGINGFACE_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct")
-            async with httpx.AsyncClient(timeout=25.0) as client:
-                hf_resp = await client.post(
-                    f"https://api-inference.huggingface.co/models/{hf_model}/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {hf_key}", "Content-Type": "application/json"},
-                    json={
-                        "model": hf_model,
-                        "messages": messages,
-                        "max_tokens": 1200,
-                        "temperature": 0.3,
-                    },
-                )
-                if hf_resp.status_code == 200:
-                    hf_data = hf_resp.json()
-                    final_text = hf_data["choices"][0]["message"]["content"]
-                    provider_used = f"Hugging Face ({hf_model})"
-        except Exception as e:
-            logger.warning(f"Hugging Face chat completion error: {e}")
+    # Attempt 1: Hugging Face Inference API via dedicated HuggingFaceService
+    try:
+        from app.services.huggingface_service import get_huggingface_service
+        hf_svc = get_huggingface_service()
+        if hf_svc.is_configured:
+            hf_completion = await hf_svc.chat_completion(
+                messages=messages,
+                max_tokens=1200,
+                temperature=0.3,
+            )
+            if hf_completion:
+                final_text = hf_completion
+                provider_used = f"Hugging Face ({hf_svc.model_name})"
+    except Exception as e:
+        logger.warning(f"Hugging Face chat completion error: {e}")
 
     # Attempt 2: OpenAI GPT-4o
     openai_key = getattr(settings, "OPENAI_API_KEY", None)

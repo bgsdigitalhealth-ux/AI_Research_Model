@@ -26,3 +26,4 @@ pillow>=10.0.0
 pinecone>=5.0.0
 langgraph>=0.2.0
 langchain-core>=0.3.0
+huggingface-hub>=0.28.0

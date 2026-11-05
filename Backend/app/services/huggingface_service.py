@@ -158,3 +158,4 @@ def get_huggingface_service() -> HuggingFaceService:
     if _hf_service_instance is None:
         _hf_service_instance = HuggingFaceService()
     return _hf_service_instance
+
