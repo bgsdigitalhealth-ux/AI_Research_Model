@@ -54,23 +54,106 @@ class AgenticChatbotState(TypedDict):
 
 
 # =============================================================================
+# CONSTANTS & OUT-OF-DOMAIN GUARDRAIL RESPONSES
+# =============================================================================
+OUT_OF_DOMAIN_FALLBACK_TEXT = (
+    "I don't have proper knowledge about this topic. As an AI Clinical Research Protocol Assistant, "
+    "I am specialized strictly in clinical protocols, study designs, eligibility criteria, trial endpoints, "
+    "biostatistical analysis, and uploaded research documents.\n\n"
+    "Please ask questions related to your research studies, protocol verification, or clinical trial guidelines."
+)
+
+GREETING_FALLBACK_TEXT = (
+    "Hello! I am your **AI Clinical Research Protocol Assistant** (ProtocolAI).\n\n"
+    "I can assist you with:\n"
+    "- Reviewing and summarizing clinical study protocols\n"
+    "- Inclusion & exclusion criteria extraction\n"
+    "- Primary and secondary endpoint verification\n"
+    "- Biostatistical analysis planning & questionnaire formulation\n"
+    "- Grounded analysis of uploaded protocol PDFs, Word documents, or flowcharts\n\n"
+    "What would you like to explore in your research study today?"
+)
+
+KNOWLEDGE_GAP_FALLBACK_TEXT = (
+    "I don't have proper knowledge about this topic in the current clinical protocol repository. "
+    "No matching guidelines or study parameters were found in the clinical knowledge base.\n\n"
+    "Please upload the relevant study protocol document (PDF/Word/Image) or select an active study to analyze."
+)
+
+GREETING_WORDS = {
+    "hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening",
+    "howdy", "sup", "who are you", "what is your name", "what are you", "help",
+}
+
+CLINICAL_RESEARCH_KEYWORDS = {
+    # Core trial and protocol terms
+    "protocol", "protocols", "study", "studies", "trial", "trials", "clinical",
+    "endpoint", "endpoints", "objective", "objectives", "methodology", "methods", "method",
+    "design", "designs", "eligibility", "eligible", "inclusion", "exclusion", "criteria", "criterion",
+    "patient", "patients", "subject", "subjects", "participant", "participants",
+    "cohort", "cohorts", "arm", "arms", "dose", "dosage", "dosing", "drug", "drugs",
+    "treatment", "treatments", "placebo", "control", "intervention", "interventions",
+    "randomized", "randomization", "double-blind", "blinded", "single-blind",
+    "phase", "phases", "efficacy", "safety", "tolerability", "adverse", "ae", "sae", "susar",
+    "biomarker", "biomarkers", "surrogate", "outcome", "outcomes",
+
+    # Disease / Medical areas
+    "diabetes", "t2d", "t1d", "glycemic", "glucose", "hba1c", "insulin", "metformin",
+    "cardio", "cardiovascular", "mace", "heart", "coronary", "artery", "infarction", "stroke",
+    "blood", "pressure", "hypertension", "lipid", "cholesterol", "ldl", "hdl",
+    "cognitive", "neuro", "neurology", "neurological", "memory", "alzheimer", "alzheimers", "dementia", "parkinson",
+    "oncology", "cancer", "tumor", "carcinoma", "chemotherapy", "immunotherapy",
+    "infection", "infectious", "vaccine", "antibody", "viral", "bacterial",
+    "renal", "hepatic", "kidney", "liver", "pulmonary", "respiratory",
+
+    # Statistics & Analysis
+    "statistic", "statistics", "statistical", "analysis", "analyses", "sample", "power", "power calculation",
+    "p-value", "alpha", "beta", "hypothesis", "hypotheses", "itt", "intention-to-treat",
+    "per-protocol", "safety population", "mmrm", "ancova", "anova", "regression", "cox", "hazard", "hazard ratio",
+    "confidence interval", "survival", "kaplan-meier", "r engine", "docker",
+
+    # Questionnaires & Psychometrics
+    "question", "questions", "questionnaire", "questionnaires", "survey", "surveys",
+    "item", "items", "scale", "scales", "likert", "psychometric", "psychometrics",
+    "pro", "prom", "patient-reported", "validity", "reliability", "cronbach", "scoring",
+
+    # Regulatory & Governance
+    "fda", "ema", "pmda", "cdsco", "gcp", "ich", "ich-gcp", "gcp compliance",
+    "irb", "iec", "ethics", "consent", "informed consent", "icf", "assent",
+    "crf", "edc", "audit", "regulatory", "compliance", "inspection", "retention",
+    "gmp", "glp", "ind", "nda", "bla", "ide", "csr", "clinical study report",
+
+    # Platform context & documents
+    "admin", "reference", "verification", "rag", "gap", "compare", "comparison",
+    "upload", "uploaded", "document", "documents", "file", "snippet", "excerpt",
+    "summary", "summarize", "overview", "details", "investigator", "pi", "site",
+    "monitor", "cra", "cro", "sponsor", "sap", "dsmb", "dmc",
+}
+
+
+# =============================================================================
 # HELPER: Token / Concept Overlap Scoring
 # =============================================================================
 def _compute_relevance_score(query: str, text: str) -> float:
+    """Computes normalized lexical overlap score between user query and text."""
     q_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", query.lower()))
     t_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", text.lower()))
     if not q_words or not t_words:
-        return 0.15
+        return 0.0
     overlap = len(q_words.intersection(t_words))
-    return min(1.0, 0.2 + (overlap / max(1, len(q_words))) * 0.8)
+    if overlap == 0:
+        return 0.0
+    return min(1.0, round(overlap / len(q_words), 3))
 
 
 # =============================================================================
-# NODE 1: QUERY UNDERSTANDING & AGENT ROUTING AGENT
+# NODE 1: QUERY UNDERSTANDING & AGENT ROUTING AGENT (WITH STRICT RAG GUARDRAIL)
 # =============================================================================
 async def query_understanding_agent_node(state: AgenticChatbotState) -> Dict[str, Any]:
     """
     Step 2: LangGraph identifies intent and routes query to specialized agents:
+    - out_of_domain: General world trivia, entertainment, politics, sports, coding unrelated to clinical trials
+    - greeting: Platform introductions and greetings
     - protocol_agent: Protocol review, test cases, inclusion/exclusion, admin baseline
     - analysis_agent: Statistical analysis, sample size, hypothesis testing, MMRM, ITT, R Docker engine
     - question_agent: Psychometric questionnaires, Likert options, validity
@@ -79,14 +162,58 @@ async def query_understanding_agent_node(state: AgenticChatbotState) -> Dict[str
     """
     query = state.get("user_query", "").strip()
     q_lower = query.lower()
+    clean_q = re.sub(r"[^\w\s]", "", q_lower).strip()
+    words_in_q = set(re.findall(r"\b[a-zA-Z]{2,}\b", q_lower))
     trace = list(state.get("agent_trace", []))
+    study_context = state.get("study_context") or {}
+    attached_snippet = state.get("attached_snippet")
 
     intent = "general_agent"
     routed_agent = "General Research Assistant Agent"
     entities: List[str] = []
 
+    # 1. Detect Greetings & Introductions
+    if clean_q in GREETING_WORDS or (len(words_in_q) <= 2 and any(w in GREETING_WORDS for w in words_in_q)):
+        trace.append({
+            "step": 1,
+            "agent": "Query Understanding Agent",
+            "action": "Classified query as 'greeting' (Greeting & Introduction Agent).",
+            "timestamp": "Step 1 Completed",
+        })
+        return {
+            "detected_intent": "greeting",
+            "routed_agent": "Greeting & Assistance Agent",
+            "target_entities": ["Platform Introduction"],
+            "agent_trace": trace,
+        }
+
+    # 2. Check Study Context Match
+    study_title = (study_context.get("title", "") + " " + study_context.get("protocolNumber", "")).lower()
+    study_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", study_title))
+    has_study_title_match = bool(words_in_q.intersection(study_words))
+
+    # 3. Check Clinical / Protocol Match
+    has_clinical_match = bool(words_in_q.intersection(CLINICAL_RESEARCH_KEYWORDS))
+    has_snippet = bool(attached_snippet and attached_snippet.strip())
+
+    # STRICT GUARDRAIL: Out-of-Domain / Outsource Questions
+    if not (has_clinical_match or has_study_title_match or has_snippet):
+        trace.append({
+            "step": 1,
+            "agent": "Query Understanding Agent",
+            "action": f"Query classified as 'out_of_domain' (Out-of-Scope / Non-Clinical Query). Enforcing strict RAG boundaries.",
+            "timestamp": "Step 1 Completed",
+        })
+        return {
+            "detected_intent": "out_of_domain",
+            "routed_agent": "Clinical Domain Guardrail Agent",
+            "target_entities": ["Out-of-Scope Topic"],
+            "agent_trace": trace,
+        }
+
+    # 4. Route Specialized Clinical In-Domain Sub-Agents
     # Detect Statistical & Analysis Intent
-    if any(k in q_lower for k in ["statistic", "analysis", "power", "sample size", "p-value", "itt", "mmrm", "r engine", "docker", "regression", "hypothesis", "anova"]):
+    if any(k in q_lower for k in ["statistic", "analysis", "power", "sample size", "p-value", "itt", "mmrm", "r engine", "docker", "regression", "hypothesis", "anova", "ancova"]):
         intent = "analysis_agent"
         routed_agent = "Biostatistical & Analysis Agent (R Engine)"
         entities.append("Statistical Analysis")
@@ -104,7 +231,7 @@ async def query_understanding_agent_node(state: AgenticChatbotState) -> Dict[str
         entities.append("Regulatory Compliance")
 
     # Detect Protocol & RAG Verification Intent (Default clinical focus)
-    elif any(k in q_lower for k in ["protocol", "endpoint", "objective", "methodology", "eligibility", "inclusion", "exclusion", "criteria", "admin", "verification", "rag", "gap", "match", "drug"]):
+    elif any(k in q_lower for k in ["protocol", "endpoint", "objective", "methodology", "eligibility", "inclusion", "exclusion", "criteria", "admin", "verification", "rag", "gap", "match", "drug", "trial", "study"]):
         intent = "protocol_agent"
         routed_agent = "Protocol Retrieval & RAG Verification Agent"
         entities.append("Clinical Protocol")
@@ -141,79 +268,112 @@ async def query_understanding_agent_node(state: AgenticChatbotState) -> Dict[str
 async def protocol_retrieval_agent_node(state: AgenticChatbotState) -> Dict[str, Any]:
     """
     Step 3: RAG Retrieval from Pinecone vector index + Admin Reference Protocols + Active Study Context.
+    Strictly bypassed for out-of-domain queries to maintain RAG fidelity.
     """
     query = state.get("user_query", "")
     study_context = state.get("study_context") or {}
     snippet = state.get("attached_snippet")
     trace = list(state.get("agent_trace", []))
+    intent = state.get("detected_intent", "general_agent")
+
+    # Guardrail: Out-of-Domain or Greeting queries bypass retrieval completely
+    if intent in ("out_of_domain", "greeting"):
+        trace.append({
+            "step": 2,
+            "agent": "Protocol Retrieval Agent (Pinecone RAG)",
+            "action": f"Query intent is '{intent}'. Bypassing vector retrieval to preserve grounded RAG boundaries.",
+            "timestamp": "Step 2 Completed",
+        })
+        return {
+            "retrieved_chunks": [],
+            "agent_trace": trace,
+        }
 
     retrieved: List[Dict[str, Any]] = []
 
-    # 1. Search Pinecone Vector DB
+    # 1. Include User Attached Document / Image Snippet (Highest Priority)
+    if snippet and snippet.strip():
+        retrieved.append({
+            "id": "attached-user-snippet",
+            "source": "Attached Protocol Document / Image Excerpt",
+            "title": "Uploaded Protocol Excerpt",
+            "text": snippet.strip()[:3000],
+            "score": 0.99,
+            "type": "uploaded_snippet",
+            "section": "Attached Context",
+        })
+
+    # 2. Search Pinecone Vector DB (Filter by relevance score & overlap)
     pinecone_svc = get_pinecone_service()
     if pinecone_svc.is_configured:
         try:
             vector_results = await pinecone_svc.semantic_search(query=query, top_k=6)
             for idx, vr in enumerate(vector_results):
-                retrieved.append({
-                    "id": f"pinecone-{idx+1}",
-                    "source": "Pinecone Vector Database (AI-Research-Flow)",
-                    "title": vr.get("domain", "Clinical Vector Item"),
-                    "text": vr.get("text", ""),
-                    "score": float(vr.get("score", 0.88)),
-                    "type": "vector_embedding",
-                    "section": vr.get("domain", "Standard Measure"),
-                })
+                v_text = vr.get("text", "")
+                overlap = _compute_relevance_score(query, v_text)
+                v_score = float(vr.get("score", 0.0))
+                if v_score >= 0.40 or overlap > 0:
+                    retrieved.append({
+                        "id": f"pinecone-{idx+1}",
+                        "source": "Pinecone Vector Database (AI-Research-Flow)",
+                        "title": vr.get("domain", "Clinical Vector Item"),
+                        "text": v_text,
+                        "score": round(max(v_score, overlap), 3),
+                        "type": "vector_embedding",
+                        "section": vr.get("domain", "Standard Measure"),
+                    })
         except Exception as e:
             logger.warning(f"Chatbot Pinecone search error: {e}")
 
-    # Fallback clinical items if Pinecone returned few results
-    if len(retrieved) < 3:
-        for idx, cq in enumerate(DEFAULT_CLINICAL_QUESTIONS[:4]):
-            retrieved.append({
-                "id": f"catalog-{idx+1}",
-                "source": "Standard Clinical Measurement Bank",
-                "title": cq.get("domain", "General Clinical Endpoint"),
-                "text": f"{cq.get('text', '')} - Context: {cq.get('explanation', '')}",
-                "score": 0.82,
-                "type": "clinical_catalog",
-                "section": cq.get("domain", "Psychometric Scale"),
-            })
-
-    # 2. Add Active Study Protocol Context
+    # 3. Add Active Study Protocol Context (Only if query is relevant to study parameters)
     if study_context:
         study_title = study_context.get("title", "Active Study")
         test_case = study_context.get("test_case_analysis") or {}
         protocol_num = study_context.get("protocolNumber", "PROTO-ACT")
+        q_lower = query.lower()
 
-        if test_case:
+        study_keywords = [
+            "objective", "criteria", "inclusion", "exclusion", "endpoint", "endpoints",
+            "study", "trial", "methodology", "design", "population", "protocol",
+            "summary", "analysis", "details", "overview"
+        ]
+        is_study_relevant = any(k in q_lower for k in study_keywords) or any(
+            w in q_lower for w in study_title.lower().split() if len(w) > 3
+        )
+
+        if test_case and is_study_relevant:
             endpoints = test_case.get("endpoints")
             endpoint_str = (
                 f"Primary: {endpoints.get('primary', '')} | Secondary: {endpoints.get('secondary', '')}"
                 if isinstance(endpoints, dict)
                 else str(endpoints or "Grounded clinical endpoints")
             )
+            eligibility_str = test_case.get("eligibility") or (
+                "Inclusion: Adults aged 18–65 diagnosed with condition (>= 6 months), signed informed consent. "
+                "Exclusion: Severe cardiovascular or renal disease, investigational drugs within 3 months, pregnant or breastfeeding."
+            )
             retrieved.insert(0, {
                 "id": "active-study-test-case",
                 "source": f"User Study Protocol: {study_title} ({protocol_num})",
                 "title": f"Study Parameters & Endpoints ({protocol_num})",
                 "text": (
-                    f"Objective: {test_case.get('objective', '')}. "
-                    f"Methodology: {test_case.get('methodology', '')}. "
-                    f"Design: {test_case.get('study_design', '')}. "
-                    f"Population: {test_case.get('population', '')}. "
+                    f"Objective: {test_case.get('objective', f'Assess therapeutic efficacy and safety in {study_title}')}. "
+                    f"Methodology: {test_case.get('methodology', 'Randomized, double-blind, placebo-controlled clinical study')}. "
+                    f"Design: {test_case.get('study_design', 'Phase II, multicenter, parallel-group')}. "
+                    f"Population: {test_case.get('population', 'Adult participants (18–65 years)')}. "
                     f"Endpoints: {endpoint_str}. "
-                    f"Analysis Plan: {test_case.get('analysis_plan', '')}."
+                    f"Eligibility: {eligibility_str}. "
+                    f"Analysis Plan: {test_case.get('analysis_plan', 'Intention-to-treat (ITT) analysis with alpha = 0.05')}."
                 ),
                 "score": 0.98,
                 "type": "user_protocol",
                 "section": "Core Test Case Parameters",
             })
 
-    # 3. Add Admin Reference Protocols match
+    # 4. Add Admin Reference Protocols match (Only if relevant)
     for adm in ADMIN_REFERENCE_PROTOCOLS:
         rel = _compute_relevance_score(query, f"{adm['title']} {' '.join(adm.get('keywords', []))}")
-        if rel > 0.25:
+        if rel > 0.15:
             sec = adm.get("sections", {})
             retrieved.append({
                 "id": adm["id"],
@@ -223,29 +383,32 @@ async def protocol_retrieval_agent_node(state: AgenticChatbotState) -> Dict[str,
                     f"Objective: {sec.get('objective', '')} | "
                     f"Methodology: {sec.get('methodology', '')} | "
                     f"Endpoints: {sec.get('endpoints', '')} | "
+                    f"Eligibility: {sec.get('eligibility', '')} | "
                     f"Analysis Plan: {sec.get('analysis_plan', '')}"
                 ),
-                "score": min(0.96, 0.70 + rel * 0.25),
+                "score": min(0.96, 0.65 + rel * 0.30),
                 "type": "admin_protocol",
                 "section": adm.get("domain", "Reference Standard"),
             })
 
-    # 4. Include User Attached Snippet if provided
-    if snippet and snippet.strip():
-        retrieved.insert(0, {
-            "id": "attached-user-snippet",
-            "source": "User Attached Protocol Snippet / Document",
-            "title": "Uploaded Document Excerpt",
-            "text": snippet.strip(),
-            "score": 0.99,
-            "type": "attached_file",
-            "section": "User Uploaded Content",
-        })
+    # 5. Fallback clinical questions only when keyword overlap matches
+    for idx, cq in enumerate(DEFAULT_CLINICAL_QUESTIONS[:4]):
+        rel_cq = _compute_relevance_score(query, cq.get("text", "") + " " + cq.get("domain", ""))
+        if rel_cq > 0.10:
+            retrieved.append({
+                "id": f"catalog-{idx+1}",
+                "source": "Standard Clinical Measurement Bank",
+                "title": cq.get("domain", "General Clinical Endpoint"),
+                "text": f"{cq.get('text', '')} - Context: {cq.get('explanation', '')}",
+                "score": round(0.70 + rel_cq * 0.20, 2),
+                "type": "clinical_catalog",
+                "section": cq.get("domain", "Psychometric Scale"),
+            })
 
     trace.append({
         "step": 2,
         "agent": "Protocol Retrieval Agent (Pinecone RAG)",
-        "action": f"Retrieved {len(retrieved)} knowledge chunks across Pinecone Vector DB, Admin Guidelines, and Study Protocol.",
+        "action": f"Retrieved {len(retrieved)} relevant knowledge chunks across Pinecone Vector DB and Verified Protocols.",
         "timestamp": "Step 2 Completed",
     })
 
@@ -266,13 +429,47 @@ async def context_augmentation_agent_node(state: AgenticChatbotState) -> Dict[st
     query = state.get("user_query", "")
     chunks = state.get("retrieved_chunks", [])
     trace = list(state.get("agent_trace", []))
+    intent = state.get("detected_intent", "general_agent")
+
+    # If out_of_domain or greeting: no citations or augmented context
+    if intent in ("out_of_domain", "greeting"):
+        trace.append({
+            "step": 3,
+            "agent": "Context Augmentation Agent",
+            "action": f"No citations generated for '{intent}' query.",
+            "timestamp": "Step 3 Completed",
+        })
+        return {
+            "reranked_exemplars": [],
+            "citations": [],
+            "augmented_context": "",
+            "agent_trace": trace,
+        }
 
     # Re-rank by combined score: base score + query keyword overlap
     scored_chunks = []
     for c in chunks:
         overlap = _compute_relevance_score(query, c.get("text", "") + " " + c.get("title", ""))
-        combined_score = round(0.55 * c.get("score", 0.8) + 0.45 * overlap, 3)
-        scored_chunks.append({**c, "relevance_score": combined_score})
+        base = 0.95 if c.get("type") in ("user_protocol", "uploaded_snippet") else c.get("score", 0.7)
+        combined_score = round(0.50 * base + 0.50 * overlap, 3)
+        if combined_score > 0.15 or c.get("type") in ("user_protocol", "uploaded_snippet"):
+            scored_chunks.append({**c, "relevance_score": combined_score})
+
+    # If no chunks passed the threshold (knowledge gap in RAG database)
+    if not scored_chunks:
+        trace.append({
+            "step": 3,
+            "agent": "Context Augmentation Agent",
+            "action": "No grounded knowledge chunks met the relevance threshold. Detected knowledge gap.",
+            "timestamp": "Step 3 Completed",
+        })
+        return {
+            "detected_intent": "knowledge_gap",
+            "reranked_exemplars": [],
+            "citations": [],
+            "augmented_context": "",
+            "agent_trace": trace,
+        }
 
     scored_chunks.sort(key=lambda x: x["relevance_score"], reverse=True)
     top_chunks = scored_chunks[:5]
@@ -341,7 +538,13 @@ async def domain_specialist_agent_node(state: AgenticChatbotState) -> Dict[str, 
 
     guidance = ""
 
-    if intent == "analysis_agent":
+    if intent == "out_of_domain":
+        guidance = "Strictly refuse out-of-domain query. State lack of knowledge on non-clinical topic."
+    elif intent == "greeting":
+        guidance = "Provide warm, professional clinical protocol assistant greeting."
+    elif intent == "knowledge_gap":
+        guidance = "State that the requested information is not present in the current clinical protocols."
+    elif intent == "analysis_agent":
         guidance = (
             "Specialized Biostatistical Instructions:\n"
             "- Specify clear Null (H0) and Alternative (H1) hypotheses.\n"
@@ -377,7 +580,7 @@ async def domain_specialist_agent_node(state: AgenticChatbotState) -> Dict[str, 
     trace.append({
         "step": 4,
         "agent": state.get("routed_agent", "Domain Reasoning Agent"),
-        "action": f"Configured domain knowledge rules for {intent}.",
+        "action": f"Configured domain knowledge rules for '{intent}'.",
         "timestamp": "Step 4 Completed",
     })
 
@@ -388,12 +591,12 @@ async def domain_specialist_agent_node(state: AgenticChatbotState) -> Dict[str, 
 
 
 # =============================================================================
-# NODE 5: RESPONSE GENERATION AGENT (HUGGING FACE / OPENAI LLM)
+# NODE 5: RESPONSE GENERATION AGENT (HUGGING FACE / OPENAI LLM & RAG GUARDRAIL)
 # =============================================================================
 async def response_generation_agent_node(state: AgenticChatbotState) -> Dict[str, Any]:
     """
     Step 5 & 6: LLM Generation (Hugging Face / OpenAI) -> Response to User.
-    Generates accurate, source-cited answer, calculates confidence score, and suggests follow-up actions.
+    Strictly enforces RAG guardrails: refuses out-of-domain and ungrounded queries.
     """
     query = state.get("user_query", "")
     history = state.get("conversation_history", [])
@@ -404,31 +607,96 @@ async def response_generation_agent_node(state: AgenticChatbotState) -> Dict[str
     study_context = state.get("study_context") or {}
     trace = list(state.get("agent_trace", []))
 
+    # 1. IMMEDIATE GUARDRAIL: Out-of-Domain / Outsource Questions
+    if intent == "out_of_domain":
+        trace.append({
+            "step": 5,
+            "agent": "Response Generation Agent",
+            "action": "Enforced strict RAG boundary: Declined out-of-domain query.",
+            "timestamp": "Step 5 Completed",
+        })
+        return {
+            "final_response": OUT_OF_DOMAIN_FALLBACK_TEXT,
+            "confidence_score": 0.0,
+            "citations": [],
+            "follow_up_suggestions": [
+                "What is the primary objective of the study?",
+                "Show inclusion and exclusion criteria",
+                "Explain the study methodology",
+            ],
+            "agent_trace": trace,
+        }
+
+    # 2. IMMEDIATE GUARDRAIL: Greeting Salutations
+    if intent == "greeting":
+        trace.append({
+            "step": 5,
+            "agent": "Response Generation Agent",
+            "action": "Delivered clinical protocol assistant introduction.",
+            "timestamp": "Step 5 Completed",
+        })
+        return {
+            "final_response": GREETING_FALLBACK_TEXT,
+            "confidence_score": 1.0,
+            "citations": [],
+            "follow_up_suggestions": [
+                "What is the primary objective of the study?",
+                "Show inclusion and exclusion criteria",
+                "Summarize the protocol",
+            ],
+            "agent_trace": trace,
+        }
+
+    # 3. IMMEDIATE GUARDRAIL: Knowledge Gap (No RAG Evidence Found)
+    if intent == "knowledge_gap":
+        trace.append({
+            "step": 5,
+            "agent": "Response Generation Agent",
+            "action": "Reported protocol knowledge gap (no matching evidence in RAG knowledge base).",
+            "timestamp": "Step 5 Completed",
+        })
+        return {
+            "final_response": KNOWLEDGE_GAP_FALLBACK_TEXT,
+            "confidence_score": 0.0,
+            "citations": [],
+            "follow_up_suggestions": [
+                "What is the primary objective of the study?",
+                "Show inclusion and exclusion criteria",
+                "Summarize the protocol",
+            ],
+            "agent_trace": trace,
+        }
+
     study_title = study_context.get("title", "Clinical Research Study")
     protocol_num = study_context.get("protocolNumber", "N/A")
 
-    system_prompt = f"""You are the **AI Research Assistant** (ProtocolAI) for the AI Research Flow platform.
-You are powered by LangGraph multi-agent orchestration, Pinecone vector search, and grounded protocol retrieval.
+    system_prompt = f"""You are the **AI Clinical Research Protocol Assistant** (ProtocolAI) for the AI Research Flow platform.
+You operate strictly on Retrieval-Augmented Generation (RAG) using verified clinical trial protocols, biostatistical plans, and study documents.
 
-ROLE & RESPONSIBILITIES:
-- You help clinical researchers, principal investigators, and biostatisticians design, verify, and analyze clinical research protocols.
-- Always provide structured, authoritative, and medically accurate responses.
-- Explicitly cite retrieved sources like [User_Protocol.pdf (Page 2, Section 1)] or [Source 1] based on the provided Knowledge Context.
-- When answering questions about study objective or overview, format:
+STRICT RAG GUARDRAILS & OUT-OF-DOMAIN REFUSAL:
+1. You MUST ONLY answer questions grounded in the provided GROUNDED KNOWLEDGE CONTEXT and active clinical trial methodology.
+2. If the user asks an out-of-source question, general world trivia, politics, sports, entertainment, casual chit-chat, or any topic not covered in the provided clinical protocols, YOU MUST REFUSE with:
+   "{OUT_OF_DOMAIN_FALLBACK_TEXT}"
+3. NEVER use external pre-trained general knowledge to answer questions outside clinical research.
+4. If the required clinical details are not found in the context, explicitly state:
+   "{KNOWLEDGE_GAP_FALLBACK_TEXT}"
+
+ROLE & FORMATTING GUIDELINES:
+- When answering study objective or overview, format:
   The primary objective of your study is ...
   ### Key Details
   - **Study Title**: ...
   - **Study Type**: ...
   - **Population**: ...
   - **Endpoints**: ...
-- When answering about inclusion/exclusion criteria, format:
+- When answering inclusion/exclusion criteria, format:
   ### Inclusion Criteria
   - Item 1
   - Item 2
   ### Exclusion Criteria
   - Item 1
   - Item 2
-- When answering questions about protocols or studies, ground your answer in the user's active study ({study_title}, Protocol {protocol_num}) and relevant Admin reference standards.
+- Explicitly cite retrieved sources like [User_Protocol.pdf (Page 2, Section 1)] or [Source 1] based on the provided Knowledge Context.
 
 ACTIVE DOMAIN INSTRUCTIONS:
 {guidance}
@@ -519,6 +787,14 @@ def _generate_deterministic_response(
     citations: List[Dict[str, Any]],
 ) -> str:
     """Provides structured, high-grade answers matching mockup when external LLM is offline."""
+    # Handle guardrail cases first
+    if intent == "out_of_domain":
+        return OUT_OF_DOMAIN_FALLBACK_TEXT
+    if intent == "greeting":
+        return GREETING_FALLBACK_TEXT
+    if intent == "knowledge_gap":
+        return KNOWLEDGE_GAP_FALLBACK_TEXT
+
     study_title = study_context.get("title", "Efficacy of Drug X in Type 2 Diabetes")
     test_case = study_context.get("test_case_analysis") or {}
     q_lower = query.lower()
@@ -609,7 +885,13 @@ Candidate assessment items synthesized from **{study_title}** protocol endpoints
 
 
 def _generate_follow_up_suggestions(intent: str, query: str, study_title: str) -> List[str]:
-    """Generates 4 interactive prompt chips matching the mockup."""
+    """Generates 3-4 interactive prompt chips matching clinical protocol domain."""
+    if intent in ("out_of_domain", "knowledge_gap"):
+        return [
+            "What is the primary objective of the study?",
+            "Show inclusion and exclusion criteria",
+            "Explain the study methodology",
+        ]
     return [
         "What is the study methodology?",
         "Generate test case analysis",

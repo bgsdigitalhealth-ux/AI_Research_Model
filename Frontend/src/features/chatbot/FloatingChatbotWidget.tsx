@@ -313,7 +313,8 @@ export function FloatingChatbotWidget() {
           <button
             type="button"
             onClick={() => setIsOpen(true)}
-            className="flex items-center gap-3 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 text-white rounded-full shadow-2xl hover:shadow-indigo-500/40 border border-indigo-400/40 transition-all transform hover:scale-105 active:scale-95 group"
+            style={{ backgroundColor: '#4338ca', color: '#ffffff' }}
+            className="flex items-center gap-3 px-4 py-3 bg-[#4338ca] hover:bg-[#3730a3] bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 text-white rounded-full shadow-2xl hover:shadow-indigo-500/40 border border-indigo-300/40 transition-all transform hover:scale-105 active:scale-95 group"
             aria-label="Open ProtocolAI Assistant"
           >
             <div className="relative flex items-center justify-center h-8 w-8 rounded-full bg-white/20 text-white shrink-0">
@@ -325,10 +326,12 @@ export function FloatingChatbotWidget() {
             </div>
             <div className="text-left pr-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-white tracking-wide">ProtocolAI Assistant</span>
+                <span className="text-xs font-bold text-white tracking-wide" style={{ color: '#ffffff' }}>
+                  ProtocolAI Assistant
+                </span>
                 <Sparkles className="h-3 w-3 text-amber-300 shrink-0" />
               </div>
-              <span className="text-[10px] font-medium text-indigo-100 flex items-center gap-1">
+              <span className="text-[10px] font-medium text-indigo-100 flex items-center gap-1" style={{ color: '#e0e7ff' }}>
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 <span>RAG Agent Online</span>
               </span>
@@ -349,7 +352,10 @@ export function FloatingChatbotWidget() {
           }`}
         >
           {/* Top Header Bar (High-Contrast Gradient with Title & Controls) */}
-          <div className="px-4 py-3 bg-indigo-600 bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 text-white flex items-center justify-between shrink-0 shadow-sm">
+          <div
+            style={{ backgroundColor: '#4338ca', color: '#ffffff' }}
+            className="px-4 py-3 bg-[#4338ca] bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 text-white flex items-center justify-between shrink-0 shadow-sm"
+          >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="h-8 w-8 rounded-xl bg-white/15 text-white flex items-center justify-center shrink-0 border border-white/20">
                 <Bot className="h-4.5 w-4.5 text-white" />
