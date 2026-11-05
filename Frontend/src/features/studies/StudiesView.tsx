@@ -47,7 +47,24 @@ export function StudiesView() {
 
   const createStudyMutation = useCreateStudy();
   const deleteStudyMutation = useDeleteStudy();
-  const studies = Array.isArray(data) ? data : data?.items;
+
+  const serverStudies = Array.isArray(data) ? data : data?.items || [];
+  // Merge user-created studies from localStorage so created studies appear immediately
+  const localStudies: any[] = (() => {
+    try {
+      const s = localStorage.getItem('user_created_studies');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const serverIds = new Set(serverStudies.map((s: any) => s.id));
+  const combinedStudies = [
+    ...localStudies.filter((ls: any) => !serverIds.has(ls.id)),
+    ...serverStudies,
+  ];
+  const studies = statusFilter ? combinedStudies.filter((s: any) => s.status === statusFilter) : combinedStudies;
 
   const handleDeleteStudy = async (studyId: string, studyTitle: string) => {
     if (
@@ -59,6 +76,17 @@ export function StudiesView() {
     }
     try {
       setDeletingId(studyId);
+      // Remove from localStorage if present
+      try {
+        const s = localStorage.getItem('user_created_studies');
+        if (s) {
+          const list = JSON.parse(s).filter((st: any) => st.id !== studyId);
+          localStorage.setItem('user_created_studies', JSON.stringify(list));
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+
       await deleteStudyMutation.mutateAsync(studyId);
       toast({
         title: 'Study Deleted',

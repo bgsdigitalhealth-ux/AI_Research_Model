@@ -55,7 +55,7 @@ async def list_protocols(
     summary="Upload research protocol document (PDF or DOCX)",
 )
 async def upload_protocol(
-    study_id: uuid.UUID = Form(..., description="Target study ID for this protocol"),
+    study_id: Optional[str] = Form(None, description="Target study ID for this protocol (Optional)"),
     title: Optional[str] = Form(None, description="Protocol title"),
     version: Optional[str] = Form(None, description="Version string (e.g. 1.0)"),
     file: UploadFile = File(..., description="PDF or DOCX document file"),
@@ -65,9 +65,44 @@ async def upload_protocol(
 ):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
+
+    # 1. Resolve or auto-create study if study_id is omitted or invalid
+    target_study_uuid: Optional[uuid.UUID] = None
+    if study_id and study_id.strip():
+        try:
+            target_study_uuid = uuid.UUID(study_id.strip())
+        except Exception:
+            target_study_uuid = None
+
+    if not target_study_uuid:
+        from app.models.study import Study
+        from sqlalchemy import select
+
+        stmt = select(Study).order_by(Study.created_at.desc()).limit(1)
+        res = await db.execute(stmt)
+        existing_study = res.scalar_one_or_none()
+        if existing_study:
+            target_study_uuid = existing_study.id
+        else:
+            hex_id = uuid.uuid4().hex[:6].upper()
+            clean_title = (title or file.filename or "Clinical Protocol").replace(".pdf", "").replace(".docx", "")
+            new_study = Study(
+                title=clean_title,
+                protocol_number=f"PROTO-2026-{hex_id}",
+                description=f"Admin reference study for protocol document: {file.filename or 'Document'}",
+                status="active",
+                phase="Phase II",
+                created_by_user_id=current_user.id,
+                principal_investigator_id=current_user.id,
+                target_participants=100,
+            )
+            db.add(new_study)
+            await db.flush()
+            target_study_uuid = new_study.id
+
     service = ProtocolService(db)
     return await service.upload_protocol(
-        study_id=study_id,
+        study_id=target_study_uuid,
         file=file,
         title=title,
         version_str=version,

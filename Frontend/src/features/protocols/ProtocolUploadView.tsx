@@ -147,7 +147,7 @@ export function ProtocolUploadView() {
     formData.append('file', selectedFile);
     formData.append('title', title.trim());
     formData.append('version', version.trim() || '1.0');
-    if (studyId.trim()) formData.append('studyId', studyId.trim());
+    if (studyId.trim()) formData.append('study_id', studyId.trim());
     if (irbNumber.trim()) formData.append('irbApprovalNumber', irbNumber.trim());
 
     try {
