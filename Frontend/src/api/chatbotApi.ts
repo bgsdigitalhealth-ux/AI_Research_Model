@@ -92,6 +92,14 @@ export interface ChatbotStatusResponse {
   features: string[];
 }
 
+export interface UploadSnippetResponse {
+  fileName: string;
+  fileType: 'pdf' | 'doc' | 'image' | 'text';
+  snippet: string;
+  previewUrl?: string | null;
+  characterCount: number;
+}
+
 export const chatbotApi = {
   async query(payload: ChatbotQueryPayload): Promise<ChatbotQueryResponse> {
     const response = await apiClient.post<{ data: ChatbotQueryResponse }>('/chatbot/query', payload);
@@ -111,12 +119,12 @@ export const chatbotApi = {
     return response.data.data;
   },
 
-  async uploadSnippet(file?: File, snippetText?: string): Promise<{ fileName: string; snippet: string; characterCount: number }> {
+  async uploadSnippet(file?: File, snippetText?: string): Promise<UploadSnippetResponse> {
     const formData = new FormData();
     if (file) formData.append('file', file);
     if (snippetText) formData.append('snippet_text', snippetText);
 
-    const response = await apiClient.post<{ data: { fileName: string; snippet: string; characterCount: number } }>(
+    const response = await apiClient.post<{ data: UploadSnippetResponse }>(
       '/chatbot/upload-snippet',
       formData,
       { headers: { 'Content-Type': 'multipart/form-data' } }

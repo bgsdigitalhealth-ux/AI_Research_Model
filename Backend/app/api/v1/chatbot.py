@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.response import StandardResponse
+from app.schemas.common import StandardResponse
 from app.services.agentic_chatbot_service import get_agentic_chatbot_service
 from app.services.huggingface_service import get_huggingface_service
 from app.services.pinecone_service import get_pinecone_service
@@ -228,7 +228,7 @@ async def configure_huggingface(
 @router.post(
     "/upload-snippet",
     status_code=status.HTTP_200_OK,
-    summary="Upload protocol excerpt snippet for grounded RAG Q&A",
+    summary="Upload protocol excerpt snippet, image, PDF, or Word document for grounded RAG Q&A",
 )
 async def upload_snippet(
     file: Optional[UploadFile] = File(None),
@@ -236,37 +236,104 @@ async def upload_snippet(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Extracts text from uploaded PDF/document or snippet for immediate attachment to conversation.
+    Extracts text from uploaded PDF, Word document (DOC/DOCX), image, or text snippet for immediate attachment to conversation context.
     """
     extracted = ""
     file_name = "snippet.txt"
+    file_type = "text"
+    preview_url = None
 
     if file:
-        file_name = file.filename or "uploaded_protocol.pdf"
+        file_name = file.filename or "uploaded_document"
         content = await file.read()
-        if file.filename and file.filename.lower().endswith(".pdf"):
+        file_size_kb = len(content) / 1024
+        lower_name = file_name.lower()
+
+        # 1. PDF Document
+        if lower_name.endswith(".pdf"):
+            file_type = "pdf"
             try:
-                import pypdf
-                import io
-                reader = pypdf.PdfReader(io.BytesIO(content))
-                pages_text = [page.extract_text() or "" for page in reader.pages[:10]]
-                extracted = "\n".join(pages_text).strip()
+                import pymupdf
+                doc = pymupdf.open(stream=content, filetype="pdf")
+                pages_text = []
+                for p_idx, page in enumerate(doc):
+                    t = page.get_text()
+                    if t.strip():
+                        pages_text.append(f"--- Page {p_idx + 1} ---\n{t.strip()}")
+                extracted = "\n\n".join(pages_text).strip()
             except Exception as e:
-                extracted = f"Extracted from {file.filename}: {len(content)} bytes"
-        else:
+                logger.warning(f"PyMuPDF failed, fallback to pypdf: {e}")
+                try:
+                    import pypdf, io
+                    reader = pypdf.PdfReader(io.BytesIO(content))
+                    pages_text = [page.extract_text() or "" for page in reader.pages[:10]]
+                    extracted = "\n".join(pages_text).strip()
+                except Exception as e2:
+                    extracted = f"Protocol PDF '{file_name}' ({file_size_kb:.1f} KB attached)."
+
+        # 2. Word Document (.docx / .doc)
+        elif lower_name.endswith((".docx", ".doc")):
+            file_type = "doc"
             try:
-                extracted = content.decode("utf-8", errors="ignore")[:10000]
+                import docx, io
+                doc = docx.Document(io.BytesIO(content))
+                text_parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+                for table in doc.tables:
+                    for row in table.rows:
+                        row_text = " | ".join([cell.text.strip() for cell in row.cells if cell.text.strip()])
+                        if row_text:
+                            text_parts.append(row_text)
+                extracted = "\n".join(text_parts).strip()
+            except Exception as e:
+                logger.warning(f"DOCX extraction error: {e}")
+                try:
+                    extracted = content.decode("utf-8", errors="ignore")[:10000]
+                except Exception:
+                    extracted = f"Word Document '{file_name}' ({file_size_kb:.1f} KB attached)."
+
+        # 3. Image (.png, .jpg, .jpeg, .webp, .bmp)
+        elif lower_name.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp")):
+            file_type = "image"
+            try:
+                from PIL import Image
+                import io, base64
+                img = Image.open(io.BytesIO(content))
+                width, height = img.size
+                img_format = img.format or "PNG"
+                
+                # Create base64 preview for UI thumbnail if <= 5MB
+                if len(content) <= 5 * 1024 * 1024:
+                    mime = f"image/{img_format.lower()}"
+                    preview_url = f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
+
+                extracted = (
+                    f"[Attached Protocol Image: {file_name} | Format: {img_format} | "
+                    f"Dimensions: {width}x{height}px | Size: {file_size_kb:.1f} KB]\n"
+                    f"Visual study artifact provided for protocol review and clinical comparison."
+                )
+            except Exception as e:
+                logger.warning(f"Image processing error: {e}")
+                extracted = f"Protocol image '{file_name}' ({file_size_kb:.1f} KB attached)."
+
+        # 4. Plain text / CSV / Markdown
+        else:
+            file_type = "text"
+            try:
+                extracted = content.decode("utf-8", errors="ignore")
             except Exception:
-                extracted = snippet_text or ""
+                extracted = f"Document '{file_name}' ({file_size_kb:.1f} KB attached)."
+
     elif snippet_text:
         extracted = snippet_text.strip()
 
     return StandardResponse(
         success=True,
-        message="Protocol snippet processed for RAG context",
+        message="Protocol file uploaded and processed for RAG context",
         data={
             "fileName": file_name,
-            "snippet": extracted[:5000],
+            "fileType": file_type,
+            "snippet": extracted[:6000],
+            "previewUrl": preview_url,
             "characterCount": len(extracted),
         },
     )
